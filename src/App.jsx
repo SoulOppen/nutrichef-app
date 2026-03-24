@@ -9,6 +9,234 @@ import {
 
 // --- CONFIGURACIÓN DE LA API ---
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // La clave se provee en el entorno de ejecución
+const GEMINI_TEXT_MODELS = [
+  import.meta.env.VITE_GEMINI_TEXT_MODEL,
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001"
+=======
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-2.0-flash"
+>>>>>>> theirs
+=======
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-2.0-flash"
+>>>>>>> theirs
+=======
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-2.0-flash"
+>>>>>>> theirs
+].filter(Boolean);
+
+const GEMINI_VISION_MODELS = [
+  import.meta.env.VITE_GEMINI_VISION_MODEL,
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-001",
+  "gemini-2.0-flash"
+].filter(Boolean);
+
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+=======
+function buildGeminiError(status, modelName, errorData = {}) {
+  const apiMessage = errorData?.error?.message;
+
+  if (status === 404) {
+    return new Error(`El modelo ${modelName} no está disponible para esta API key.`);
+  }
+
+  if (status === 429) {
+    return new Error(apiMessage || "Gemini alcanzó el límite de solicitudes o cuota disponible. Intenta de nuevo en unos minutos.");
+  }
+
+  if (status === 503) {
+    return new Error("Gemini no está disponible temporalmente. Intenta de nuevo en unos minutos.");
+  }
+
+  return new Error(apiMessage || `HTTP error! status: ${status}`);
+}
+
+>>>>>>> theirs
+=======
+=======
+>>>>>>> theirs
+const RETRYABLE_GEMINI_STATUS = new Set([404, 429, 503]);
+const GEMINI_RETRY_DELAY_MS = 1200;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+class GeminiRequestError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "GeminiRequestError";
+    this.status = options.status;
+    this.retryable = Boolean(options.retryable);
+    this.modelName = options.modelName;
+  }
+}
+
+function buildGeminiError(status, modelName, errorData = {}) {
+  const apiMessage = errorData?.error?.message;
+  const retryable = RETRYABLE_GEMINI_STATUS.has(status);
+
+  if (status === 404) {
+    return new GeminiRequestError(`El modelo ${modelName} no está disponible para esta API key.`, { status, retryable, modelName });
+  }
+
+  if (status === 429) {
+    return new GeminiRequestError(apiMessage || "Gemini alcanzó el límite de solicitudes o cuota disponible. Intenta de nuevo en unos minutos.", { status, retryable, modelName });
+  }
+
+  if (status === 503) {
+    return new GeminiRequestError("Gemini no está disponible temporalmente. Intenta de nuevo en unos minutos.", { status, retryable, modelName });
+  }
+
+  return new GeminiRequestError(apiMessage || `HTTP error! status: ${status}`, { status, retryable, modelName });
+}
+
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+async function fetchGeminiContent({ modelNames, payload }) {
+  if (!apiKey) {
+    console.error("FALTA LA API KEY. Revisa que el archivo .env esté bien escrito.");
+    throw new Error("API Key faltante");
+  }
+
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+  let lastError = null;
+
+  for (const modelName of [...new Set(modelNames)]) {
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+  const uniqueModels = [...new Set(modelNames)];
+  let lastError = null;
+  let sawRetryableLimit = false;
+
+  for (const modelName of uniqueModels) {
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`Detalle del error de Google (${modelName}):`, errorData);
+
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+        if (response.status === 404) {
+          lastError = new Error(`Modelo no disponible: ${modelName}`);
+          continue;
+        }
+
+        throw new Error(`HTTP error! status: ${response.status}`);
+=======
+        const error = buildGeminiError(response.status, modelName, errorData);
+
+        if (response.status === 404 || response.status === 429 || response.status === 503) {
+          lastError = error;
+          if (response.status === 429 || response.status === 503) sawRetryableLimit = true;
+=======
+=======
+>>>>>>> theirs
+        const error = buildGeminiError(response.status, modelName, errorData);
+
+        if (RETRYABLE_GEMINI_STATUS.has(response.status)) {
+          lastError = error;
+          if (response.status === 429 || response.status === 503) sawRetryableLimit = true;
+          if (response.status === 429) await sleep(GEMINI_RETRY_DELAY_MS);
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+          continue;
+        }
+
+        throw error;
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+      if (error.message?.includes("Modelo no disponible")) {
+=======
+      if (
+        error.message?.includes("no está disponible para esta API key") ||
+        error.message?.includes("límite de solicitudes") ||
+        error.message?.includes("no está disponible temporalmente")
+      ) {
+>>>>>>> theirs
+=======
+      if (error instanceof GeminiRequestError && error.retryable) {
+>>>>>>> theirs
+=======
+      if (error instanceof GeminiRequestError && error.retryable) {
+>>>>>>> theirs
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+  if (sawRetryableLimit) {
+    throw new Error("Gemini rechazó la solicitud en todos los modelos disponibles por cuota o saturación. Intenta de nuevo en unos minutos.");
+  }
+
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+  throw lastError || new Error("No hay modelos Gemini disponibles para esta API key.");
+}
 
 // --- COMPONENTE PRINCIPAL ---
 export default function App() {
@@ -498,7 +726,7 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
       const result = await callGeminiAPI(prompt);
       setSuggestions(result.suggestions);
     } catch (err) {
-      setError("Hubo un error al generar las opciones. Intenta de nuevo.");
+      setError(err.message || "Hubo un error al generar las opciones. Intenta de nuevo.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -538,6 +766,7 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
       setSelectedRecipe(result);
     } catch (err) {
       console.error(err);
+      setError(err.message || "No pude generar la receta ahora. Intenta de nuevo en unos minutos.");
     } finally {
       setGeneratingRecipe(false);
     }
@@ -728,6 +957,12 @@ function ExploreView({ profile, setProfile, savedMeals, setSavedMeals, favoriteR
       setSuggestions(result.suggestions);
     } catch (err) {
       console.error(err);
+      setSuggestions([{
+        id: "error",
+        name: "No pude generar sugerencias ahora",
+        type: "Error de Gemini",
+        description: err.message || "Intenta de nuevo en unos minutos."
+      }]);
     } finally {
       setLoading(false);
     }
@@ -766,6 +1001,12 @@ function ExploreView({ profile, setProfile, savedMeals, setSavedMeals, favoriteR
       setSuggestions(result.suggestions);
     } catch (err) {
       console.error(err);
+      setSuggestions([{
+        id: "error",
+        name: "No pude generar sugerencias ahora",
+        type: "Error de Gemini",
+        description: err.message || "Intenta de nuevo en unos minutos."
+      }]);
     } finally {
       setLoading(false);
     }
@@ -1464,17 +1705,14 @@ function RecipeCard({ recipe, profile, setProfile, savedMeals, setSavedMeals, fa
     const prompt = `El usuario está cocinando esta receta: "${recipe.title}". Ingredientes: ${recipe.ingredients ? recipe.ingredients.map(i => i.name).join(', ') : 'Desconocidos'}. Pregunta del usuario sobre el plato: "${chefQuestion}". Responde de forma concisa, útil y amable en un solo párrafo corto, asumiendo el rol de un chef experto.`;
     
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      const data = await fetchGeminiContent({
+        modelNames: GEMINI_TEXT_MODELS,
+        payload: { contents: [{ parts: [{ text: prompt }] }] }
       });
-      const data = await response.json();
       setChefAnswer(data.candidates?.[0]?.content?.parts?.[0]?.text || "No tengo una respuesta para eso ahora.");
     } catch (err) {
       console.error(err);
-      setChefAnswer("Hubo un error de conexión con el Chef IA.");
+      setChefAnswer(err.message || "Hubo un error de conexión con el Chef IA.");
     } finally {
       setAsking(false);
       setChefQuestion('');
@@ -1740,14 +1978,6 @@ function RecipeCard({ recipe, profile, setProfile, savedMeals, setSavedMeals, fa
 // --- LÓGICA DE API GEMINI ---
 
 async function callGeminiAPI(promptText) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    console.error("FALTA LA API KEY. Revisa que el archivo .env esté bien escrito.");
-    throw new Error("API Key faltante");
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
   const payload = {
     contents: [{ parts: [{ text: promptText }] }],
     generationConfig: { 
@@ -1756,19 +1986,7 @@ async function callGeminiAPI(promptText) {
   };
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("Detalle del error de Google:", errorData);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    const data = await response.json();
+    const data = await fetchGeminiContent({ modelNames: GEMINI_TEXT_MODELS, payload });
     const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!textResult) throw new Error("La IA no devolvió ningún texto.");
@@ -1785,9 +2003,6 @@ async function callGeminiAPI(promptText) {
 }
 
 async function callGeminiVisionAPI(promptText, base64Image, mimeType) {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  
   const payload = {
     contents: [{ 
       role: "user",
@@ -1798,19 +2013,6 @@ async function callGeminiVisionAPI(promptText, base64Image, mimeType) {
     }]
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-
- if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      // ESTA LÍNEA HARÁ QUE SALTE UN POP-UP EN TU PANTALLA
-      alert("DIAGNÓSTICO DE GOOGLE:\n" + JSON.stringify(errorData, null, 2));
-      console.error("Detalle del error de Google:", errorData);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-  const data = await response.json();
+  const data = await fetchGeminiContent({ modelNames: GEMINI_VISION_MODELS, payload });
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
