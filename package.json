@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "vite --configLoader native",
+    "dev:server": "node server.js",
+    "build": "vite build --configLoader native",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview --configLoader native",
+    "start": "node server.js"
   },
   "dependencies": {
     "lucide-react": "^1.0.1",

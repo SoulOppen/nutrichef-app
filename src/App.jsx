@@ -7,235 +7,125 @@ import {
   Star, PiggyBank, Edit3, X, Compass, Heart, Bookmark, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 
-// --- CONFIGURACIÓN DE LA API ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // La clave se provee en el entorno de ejecución
-const GEMINI_TEXT_MODELS = [
-  import.meta.env.VITE_GEMINI_TEXT_MODEL,
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001"
-=======
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-2.0-flash"
->>>>>>> theirs
-=======
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-2.0-flash"
->>>>>>> theirs
-=======
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-2.0-flash"
->>>>>>> theirs
-].filter(Boolean);
+// --- CONFIGURACION DE LA API ---
+const GEMINI_API_ENDPOINT = '/api/gemini';
+const GEMINI_COOLDOWN_KEY = 'nutrichef_gemini_cooldown_until';
+const GEMINI_COOLDOWN_MS = 2 * 60 * 1000;
+const GENERATOR_SUGGESTIONS_CACHE_KEY = 'nutrichef_generator_suggestions_cache';
+const GENERATOR_RECIPE_CACHE_KEY = 'nutrichef_generator_recipe_cache';
 
-const GEMINI_VISION_MODELS = [
-  import.meta.env.VITE_GEMINI_VISION_MODEL,
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-001",
-  "gemini-2.0-flash"
-].filter(Boolean);
-
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
-function buildGeminiError(status, modelName, errorData = {}) {
-  const apiMessage = errorData?.error?.message;
-
-  if (status === 404) {
-    return new Error(`El modelo ${modelName} no está disponible para esta API key.`);
+function readStoredJson(key, fallbackValue) {
+  if (typeof window === 'undefined') {
+    return fallbackValue;
   }
 
-  if (status === 429) {
-    return new Error(apiMessage || "Gemini alcanzó el límite de solicitudes o cuota disponible. Intenta de nuevo en unos minutos.");
+  const storedValue = window.localStorage.getItem(key);
+
+  if (!storedValue) {
+    return fallbackValue;
   }
 
-  if (status === 503) {
-    return new Error("Gemini no está disponible temporalmente. Intenta de nuevo en unos minutos.");
-  }
-
-  return new Error(apiMessage || `HTTP error! status: ${status}`);
-}
-
->>>>>>> theirs
-=======
-=======
->>>>>>> theirs
-const RETRYABLE_GEMINI_STATUS = new Set([404, 429, 503]);
-const GEMINI_RETRY_DELAY_MS = 1200;
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-class GeminiRequestError extends Error {
-  constructor(message, options = {}) {
-    super(message);
-    this.name = "GeminiRequestError";
-    this.status = options.status;
-    this.retryable = Boolean(options.retryable);
-    this.modelName = options.modelName;
+  try {
+    return JSON.parse(storedValue);
+  } catch (error) {
+    console.error(`No se pudo leer ${key} desde localStorage:`, error);
+    return fallbackValue;
   }
 }
 
-function buildGeminiError(status, modelName, errorData = {}) {
-  const apiMessage = errorData?.error?.message;
-  const retryable = RETRYABLE_GEMINI_STATUS.has(status);
-
-  if (status === 404) {
-    return new GeminiRequestError(`El modelo ${modelName} no está disponible para esta API key.`, { status, retryable, modelName });
+function writeStoredJson(key, value) {
+  if (typeof window === 'undefined') {
+    return;
   }
 
-  if (status === 429) {
-    return new GeminiRequestError(apiMessage || "Gemini alcanzó el límite de solicitudes o cuota disponible. Intenta de nuevo en unos minutos.", { status, retryable, modelName });
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`No se pudo guardar ${key} en localStorage:`, error);
   }
-
-  if (status === 503) {
-    return new GeminiRequestError("Gemini no está disponible temporalmente. Intenta de nuevo en unos minutos.", { status, retryable, modelName });
-  }
-
-  return new GeminiRequestError(apiMessage || `HTTP error! status: ${status}`, { status, retryable, modelName });
 }
 
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-async function fetchGeminiContent({ modelNames, payload }) {
-  if (!apiKey) {
-    console.error("FALTA LA API KEY. Revisa que el archivo .env esté bien escrito.");
-    throw new Error("API Key faltante");
+function getGeminiCooldownUntil() {
+  const storedValue = readStoredJson(GEMINI_COOLDOWN_KEY, 0);
+  const numericValue = Number(storedValue);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function setGeminiCooldownUntil(timestamp) {
+  writeStoredJson(GEMINI_COOLDOWN_KEY, timestamp);
+}
+
+function getCooldownMessage(cooldownUntil) {
+  const remainingMs = Math.max(0, cooldownUntil - Date.now());
+  const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return `Gemini esta en pausa por limite de solicitudes. Espera ${remainingMinutes} min antes de intentar otra vez.`;
+}
+
+function buildGeneratorSuggestionsCacheKey({ ingredients, dishType, difficulty, cuisine, profile }) {
+  return JSON.stringify({
+    ingredients: ingredients.trim().toLowerCase(),
+    dishType,
+    difficulty,
+    cuisine,
+    budgetFriendly: profile.budgetFriendly,
+    goals: profile.goals,
+    dietaryStyle: profile.dietaryStyle,
+    religiousDiet: profile.religiousDiet,
+    allergies: profile.allergies,
+    dislikes: profile.dislikes,
+    learnedPreferences: profile.learnedPreferences,
+    favoriteTitles: profile.favoriteTitles || [],
+    dailyCalories: profile.dailyCalories,
+  });
+}
+
+function buildGeneratorRecipeCacheKey({ suggestion, ingredients, profile }) {
+  return JSON.stringify({
+    suggestionName: suggestion.name,
+    suggestionType: suggestion.type,
+    suggestionDescription: suggestion.description,
+    ingredients: ingredients.trim().toLowerCase(),
+    goals: profile.goals,
+    dietaryStyle: profile.dietaryStyle,
+    religiousDiet: profile.religiousDiet,
+    allergies: profile.allergies,
+    dislikes: profile.dislikes,
+    learnedPreferences: profile.learnedPreferences,
+    useProteinPowder: profile.useProteinPowder,
+    dailyCalories: profile.dailyCalories,
+    proteinTarget: profile.proteinTarget,
+    fiberTarget: profile.fiberTarget,
+  });
+}
+
+async function fetchGeminiContent({ kind, payload }) {
+  const cooldownUntil = getGeminiCooldownUntil();
+
+  if (cooldownUntil > Date.now()) {
+    throw new Error(getCooldownMessage(cooldownUntil));
   }
 
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-  let lastError = null;
+  const response = await fetch(GEMINI_API_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind, payload })
+  });
 
-  for (const modelName of [...new Set(modelNames)]) {
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-  const uniqueModels = [...new Set(modelNames)];
-  let lastError = null;
-  let sawRetryableLimit = false;
+  const data = await response.json().catch(() => ({}));
 
-  for (const modelName of uniqueModels) {
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  if (!response.ok) {
+    const message = data?.error || 'No se pudo completar la solicitud a Gemini.';
 
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error(`Detalle del error de Google (${modelName}):`, errorData);
-
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-        if (response.status === 404) {
-          lastError = new Error(`Modelo no disponible: ${modelName}`);
-          continue;
-        }
-
-        throw new Error(`HTTP error! status: ${response.status}`);
-=======
-        const error = buildGeminiError(response.status, modelName, errorData);
-
-        if (response.status === 404 || response.status === 429 || response.status === 503) {
-          lastError = error;
-          if (response.status === 429 || response.status === 503) sawRetryableLimit = true;
-=======
-=======
->>>>>>> theirs
-        const error = buildGeminiError(response.status, modelName, errorData);
-
-        if (RETRYABLE_GEMINI_STATUS.has(response.status)) {
-          lastError = error;
-          if (response.status === 429 || response.status === 503) sawRetryableLimit = true;
-          if (response.status === 429) await sleep(GEMINI_RETRY_DELAY_MS);
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-          continue;
-        }
-
-        throw error;
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-      }
-
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-      if (error.message?.includes("Modelo no disponible")) {
-=======
-      if (
-        error.message?.includes("no está disponible para esta API key") ||
-        error.message?.includes("límite de solicitudes") ||
-        error.message?.includes("no está disponible temporalmente")
-      ) {
->>>>>>> theirs
-=======
-      if (error instanceof GeminiRequestError && error.retryable) {
->>>>>>> theirs
-=======
-      if (error instanceof GeminiRequestError && error.retryable) {
->>>>>>> theirs
-        continue;
-      }
-
-      throw error;
+    if (response.status === 429) {
+      const nextCooldownUntil = Date.now() + GEMINI_COOLDOWN_MS;
+      setGeminiCooldownUntil(nextCooldownUntil);
+      throw new Error(`${message} ${getCooldownMessage(nextCooldownUntil)} Si el problema persiste, revisa la cuota o rota la API key del servidor.`);
     }
+
+    throw new Error(message);
   }
 
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-  if (sawRetryableLimit) {
-    throw new Error("Gemini rechazó la solicitud en todos los modelos disponibles por cuota o saturación. Intenta de nuevo en unos minutos.");
-  }
-
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-  throw lastError || new Error("No hay modelos Gemini disponibles para esta API key.");
+  return data;
 }
 
 // --- COMPONENTE PRINCIPAL ---
@@ -247,11 +137,11 @@ export default function App() {
   const [savedMeals, setSavedMeals] = useState([]); // Comidas que el usuario quiere forzar en el próximo plan
   
   // Estados de Guardados a largo plazo
-  const [favoriteRecipes, setFavoriteRecipes] = useState([]);
+   const [favoriteRecipes, setFavoriteRecipes] = useState(() => readStoredJson('nutrichef_favs', []));
   const [interestedRecipes, setInterestedRecipes] = useState([]);
   
   // Estado del Perfil del Usuario
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState(() => readStoredJson('nutrichef_profile', {
     weight: '',
     height: '',
     age: '',
@@ -271,16 +161,7 @@ export default function App() {
     allergies: [],
     dislikes: [],
     learnedPreferences: []
-  });
-
-  // Cargar datos al iniciar
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('nutrichef_profile');
-    const savedFavs = localStorage.getItem('nutrichef_favs');
-    
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
-    if (savedFavs) setFavoriteRecipes(JSON.parse(savedFavs));
-  }, []);
+  }));
 
   // Guardar datos cada vez que cambien
   useEffect(() => {
@@ -343,7 +224,7 @@ export default function App() {
         {activeTab === 'generator' && <GeneratorView profile={profile} setProfile={setProfile} savedMeals={savedMeals} setSavedMeals={setSavedMeals} favoriteRecipes={favoriteRecipes} setFavoriteRecipes={setFavoriteRecipes} interestedRecipes={interestedRecipes} setInterestedRecipes={setInterestedRecipes} />}
         {activeTab === 'explore' && <ExploreView profile={profile} setProfile={setProfile} savedMeals={savedMeals} setSavedMeals={setSavedMeals} favoriteRecipes={favoriteRecipes} setFavoriteRecipes={setFavoriteRecipes} interestedRecipes={interestedRecipes} setInterestedRecipes={setInterestedRecipes} />}
         {activeTab === 'saved' && <SavedView profile={profile} setProfile={setProfile} savedMeals={savedMeals} setSavedMeals={setSavedMeals} favoriteRecipes={favoriteRecipes} setFavoriteRecipes={setFavoriteRecipes} interestedRecipes={interestedRecipes} setInterestedRecipes={setInterestedRecipes} />}
-        {activeTab === 'plan' && <MealPlanView profile={profile} plan={plan} setPlan={setPlan} savedMeals={savedMeals} setSavedMeals={setSavedMeals} favoriteRecipes={favoriteRecipes} setFavoriteRecipes={setFavoriteRecipes} interestedRecipes={interestedRecipes} setInterestedRecipes={setInterestedRecipes} />}
+        {activeTab === 'plan' && <MealPlanView profile={profile} setProfile={setProfile} plan={plan} setPlan={setPlan} savedMeals={savedMeals} setSavedMeals={setSavedMeals} favoriteRecipes={favoriteRecipes} setFavoriteRecipes={setFavoriteRecipes} interestedRecipes={interestedRecipes} setInterestedRecipes={setInterestedRecipes} />}
       </main>
     </div>
   );
@@ -390,7 +271,7 @@ function ProfileView({ profile, setProfile }) {
         }));
       }
     }
-  }, [profile.weight, profile.height, profile.age, profile.gender, profile.activityLevel, profile.goals, profile.manualCalories, profile.manualProtein, profile.manualFiber]);
+  }, [profile.weight, profile.height, profile.age, profile.gender, profile.activityLevel, profile.goals, profile.manualCalories, profile.manualProtein, profile.manualFiber, setProfile]);
 
   const toggleAllergy = (res) => {
     if (profile.allergies.includes(res)) {
@@ -655,7 +536,27 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   
   const [error, setError] = useState(null);
+  const [quotaNotice, setQuotaNotice] = useState(null);
+  const [cacheNotice, setCacheNotice] = useState(null);
+  const [cooldownUntil, setCooldownUntilState] = useState(() => getGeminiCooldownUntil());
+  const [now, setNow] = useState(Date.now());
   const fileInputRef = useRef(null);
+  const cooldownRemainingMs = Math.max(0, cooldownUntil - now);
+  const isCooldownActive = cooldownRemainingMs > 0;
+  const cooldownLabel = isCooldownActive ? `Disponible en ${Math.ceil(cooldownRemainingMs / 1000)}s` : null;
+
+  useEffect(() => {
+    if (!isCooldownActive) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      setCooldownUntilState(getGeminiCooldownUntil());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isCooldownActive]);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -684,8 +585,29 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
       setError("Por favor ingresa algunos ingredientes que tengas.");
       return;
     }
+    if (isCooldownActive) {
+      const cooldownMessage = getCooldownMessage(cooldownUntil);
+      setQuotaNotice(cooldownMessage);
+      setError(cooldownMessage);
+      return;
+    }
+
+    const suggestionsCacheKey = buildGeneratorSuggestionsCacheKey({
+      ingredients,
+      dishType,
+      difficulty,
+      cuisine,
+      profile: {
+        ...profile,
+        favoriteTitles: favoriteRecipes.map((recipe) => recipe.title),
+      }
+    });
+    const suggestionsCache = readStoredJson(GENERATOR_SUGGESTIONS_CACHE_KEY, {});
+
     setLoading(true);
     setError(null);
+    setQuotaNotice(null);
+    setCacheNotice(null);
     setSuggestions(null);
     setSelectedRecipe(null);
 
@@ -725,7 +647,22 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
     try {
       const result = await callGeminiAPI(prompt);
       setSuggestions(result.suggestions);
+      suggestionsCache[suggestionsCacheKey] = result.suggestions;
+      writeStoredJson(GENERATOR_SUGGESTIONS_CACHE_KEY, suggestionsCache);
     } catch (err) {
+      const cachedSuggestions = suggestionsCache[suggestionsCacheKey];
+
+      if (Array.isArray(cachedSuggestions) && cachedSuggestions.length > 0) {
+        setSuggestions(cachedSuggestions);
+        setCacheNotice('Mostrando la ultima tanda de opciones guardadas mientras Gemini vuelve a estar disponible.');
+      }
+
+      if (err.message?.includes('limite de solicitudes') || err.message?.includes('Gemini esta en pausa')) {
+        setCooldownUntilState(getGeminiCooldownUntil());
+        setNow(Date.now());
+        setQuotaNotice(err.message);
+      }
+
       setError(err.message || "Hubo un error al generar las opciones. Intenta de nuevo.");
       console.error(err);
     } finally {
@@ -734,7 +671,20 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
   };
 
   const generateFromSuggestion = async (sugg) => {
+    if (isCooldownActive) {
+      const cooldownMessage = getCooldownMessage(cooldownUntil);
+      setQuotaNotice(cooldownMessage);
+      setError(cooldownMessage);
+      return;
+    }
+
+    const recipeCacheKey = buildGeneratorRecipeCacheKey({ suggestion: sugg, ingredients, profile });
+    const recipeCache = readStoredJson(GENERATOR_RECIPE_CACHE_KEY, {});
+
     setGeneratingRecipe(true);
+    setError(null);
+    setQuotaNotice(null);
+    setCacheNotice(null);
     const prompt = `
       Genera la receta completa para: "${sugg.name}".
       Contexto de la idea original: ${sugg.description}. Usando estos ingredientes base: ${ingredients}.
@@ -764,7 +714,22 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
     try {
       const result = await callGeminiAPI(prompt);
       setSelectedRecipe(result);
+      recipeCache[recipeCacheKey] = result;
+      writeStoredJson(GENERATOR_RECIPE_CACHE_KEY, recipeCache);
     } catch (err) {
+      const cachedRecipe = recipeCache[recipeCacheKey];
+
+      if (cachedRecipe) {
+        setSelectedRecipe(cachedRecipe);
+        setCacheNotice('Mostrando la ultima receta guardada para esta idea mientras Gemini vuelve a estar disponible.');
+      }
+
+      if (err.message?.includes('limite de solicitudes') || err.message?.includes('Gemini esta en pausa')) {
+        setCooldownUntilState(getGeminiCooldownUntil());
+        setNow(Date.now());
+        setQuotaNotice(err.message);
+      }
+
       console.error(err);
       setError(err.message || "No pude generar la receta ahora. Intenta de nuevo en unos minutos.");
     } finally {
@@ -846,12 +811,23 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
 
             <button 
               onClick={getSuggestions}
-              disabled={loading || generatingRecipe}
+              disabled={loading || generatingRecipe || isCooldownActive}
               className="w-full py-3 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold transition-all disabled:opacity-70 flex justify-center items-center gap-2 shadow-sm"
             >
               {loading ? <RefreshCw className="animate-spin" size={20} /> : <Flame size={20} />}
-              {loading ? 'Analizando tu cocina...' : 'Buscar Opciones'}
+              {loading ? 'Analizando tu cocina...' : (isCooldownActive ? cooldownLabel : 'Buscar Opciones')}
             </button>
+            {quotaNotice && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <div className="font-semibold">Gemini esta limitado temporalmente</div>
+                <div className="mt-1">{quotaNotice}</div>
+              </div>
+            )}
+            {cacheNotice && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                {cacheNotice}
+              </div>
+            )}
             {error && <p className="text-red-500 text-sm mt-2 text-center">{error}</p>}
           </div>
         </div>
@@ -887,9 +863,10 @@ function GeneratorView({ profile, setProfile, savedMeals, setSavedMeals, favorit
                   </div>
                   <button 
                     onClick={() => generateFromSuggestion(sugg)}
-                    className="w-full sm:w-auto py-2.5 px-6 bg-orange-50 text-orange-700 font-bold rounded-xl hover:bg-orange-600 hover:text-white transition-colors flex items-center justify-center gap-2 shrink-0"
+                    disabled={generatingRecipe || isCooldownActive}
+                    className="w-full sm:w-auto py-2.5 px-6 bg-orange-50 text-orange-700 font-bold rounded-xl hover:bg-orange-600 hover:text-white transition-colors flex items-center justify-center gap-2 shrink-0 disabled:opacity-60 disabled:hover:bg-orange-50 disabled:hover:text-orange-700"
                   >
-                    <ChefHat size={18} /> Ver Receta
+                    <ChefHat size={18} /> {isCooldownActive ? cooldownLabel : 'Ver Receta'}
                   </button>
                 </div>
               ))}
@@ -1201,7 +1178,7 @@ function SavedView({ profile, setProfile, savedMeals, setSavedMeals, favoriteRec
   );
 }
 
-function MealPlanView({ profile, plan, setPlan, savedMeals, setSavedMeals, favoriteRecipes, setFavoriteRecipes, interestedRecipes, setInterestedRecipes }) {
+function MealPlanView({ profile, setProfile, plan, setPlan, savedMeals, setSavedMeals, favoriteRecipes, setFavoriteRecipes, interestedRecipes, setInterestedRecipes }) {
   const [loading, setLoading] = useState(false);
   const [shoppingList, setShoppingList] = useState(null);
   const [loadingList, setLoadingList] = useState(false);
@@ -1664,7 +1641,7 @@ function MealPlanView({ profile, plan, setPlan, savedMeals, setSavedMeals, favor
 
 // --- COMPONENTES COMPARTIDOS ---
 
-function RecipeCard({ recipe, profile, setProfile, savedMeals, setSavedMeals, favoriteRecipes, setFavoriteRecipes, interestedRecipes, setInterestedRecipes }) {
+function RecipeCard({ recipe, setProfile, savedMeals, setSavedMeals, favoriteRecipes, setFavoriteRecipes, interestedRecipes, setInterestedRecipes }) {
   const [chefQuestion, setChefQuestion] = useState('');
   const [chefAnswer, setChefAnswer] = useState('');
   const [asking, setAsking] = useState(false);
@@ -1706,7 +1683,7 @@ function RecipeCard({ recipe, profile, setProfile, savedMeals, setSavedMeals, fa
     
     try {
       const data = await fetchGeminiContent({
-        modelNames: GEMINI_TEXT_MODELS,
+        kind: 'text',
         payload: { contents: [{ parts: [{ text: prompt }] }] }
       });
       setChefAnswer(data.candidates?.[0]?.content?.parts?.[0]?.text || "No tengo una respuesta para eso ahora.");
@@ -1986,7 +1963,7 @@ async function callGeminiAPI(promptText) {
   };
 
   try {
-    const data = await fetchGeminiContent({ modelNames: GEMINI_TEXT_MODELS, payload });
+    const data = await fetchGeminiContent({ kind: 'text', payload });
     const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!textResult) throw new Error("La IA no devolvió ningún texto.");
@@ -2013,6 +1990,6 @@ async function callGeminiVisionAPI(promptText, base64Image, mimeType) {
     }]
   };
 
-  const data = await fetchGeminiContent({ modelNames: GEMINI_VISION_MODELS, payload });
+  const data = await fetchGeminiContent({ kind: 'vision', payload });
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
