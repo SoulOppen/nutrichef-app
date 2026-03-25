@@ -16,19 +16,25 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API
 console.log("====================================");
 console.log("🔑 CLAVE CARGADA EN EL SERVIDOR:", GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + "..." : "NINGUNA");
 console.log("====================================");
+const DEFAULT_TEXT_MODELS = [
+  "gemini-2.0-flash",
+];
+
+const DEFAULT_VISION_MODELS = [
+  "gemini-2.0-flash",
+];
+
 const GEMINI_TEXT_MODELS = [
-  process.env.GEMINI_TEXT_MODEL || process.env.VITE_GEMINI_TEXT_MODEL,
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-001',
-  'gemini-2.0-flash',
-].filter(Boolean);
-const GEMINI_VISION_MODELS = [
-  process.env.GEMINI_VISION_MODEL || process.env.VITE_GEMINI_VISION_MODEL,
-  'gemini-1.5-flash',
-  'gemini-1.5-flash-001',
-  'gemini-2.0-flash',
+  process.env.GEMINI_TEXT_MODEL,
+  process.env.VITE_GEMINI_TEXT_MODEL,
+  ...DEFAULT_TEXT_MODELS
 ].filter(Boolean);
 
+const GEMINI_VISION_MODELS = [
+  process.env.GEMINI_VISION_MODEL,
+  process.env.VITE_GEMINI_VISION_MODEL,
+  ...DEFAULT_VISION_MODELS
+].filter(Boolean);
 const RETRYABLE_GEMINI_STATUS = new Set([404, 429, 503]);
 const GEMINI_RETRY_DELAY_MS = 1200;
 const MIME_TYPES = {
@@ -106,10 +112,14 @@ function buildGeminiError(status, modelName, errorData = {}) {
 
   return new GeminiRequestError(apiMessage || `HTTP error! status: ${status}`, { status, retryable, modelName });
 }
-
 async function fetchGeminiContent(kind, payload) {
   if (!GEMINI_API_KEY) {
     throw new Error('Falta GEMINI_API_KEY en el servidor.');
+  }
+
+  // 🔧 FIX AQUÍ (adentro de la función)
+  if (payload?.generation_config?.responseMimeType) {
+    delete payload.generation_config.responseMimeType;
   }
 
   const modelNames = kind === 'vision' ? GEMINI_VISION_MODELS : GEMINI_TEXT_MODELS;
@@ -119,7 +129,9 @@ async function fetchGeminiContent(kind, payload) {
   let sawTemporaryUnavailable = false;
 
   for (const modelName of uniqueModels) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+    const API_VERSION = modelName.includes("2.0") ? "v1" : "v1beta";
+
+const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
     try {
       const response = await fetch(url, {
