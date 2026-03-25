@@ -189,3 +189,10 @@ const data = await fetchGeminiContent({ kind: 'vision', payload });
 
 return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
+
+export function buildGeneratorSuggestionsCacheKey({ ingredients, profile }) {
+  return `generator:suggestions:${JSON.stringify({
+    ingredients,
+    profile
+  })}`;
+}
