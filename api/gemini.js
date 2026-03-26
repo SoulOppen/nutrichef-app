@@ -34,3 +34,4 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+console.log("BODY:", JSON.stringify(body, null, 2));
