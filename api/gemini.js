@@ -1,9 +1,9 @@
 export default async function handler(req, res) {
   try {
-    const { prompt } = req.body;
+    const body = req.body;
 
-    if (!prompt) {
-      return res.status(400).json({ error: "Falta prompt" });
+    if (!body) {
+      return res.status(400).json({ error: "No body provided" });
     }
 
     const response = await fetch(
@@ -13,29 +13,24 @@ export default async function handler(req, res) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }]
-            }
-          ]
-        }),
+        body: JSON.stringify(body), // 👈 CLAVE: pasa directo lo que envía el frontend
       }
     );
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("Gemini error:", data);
       return res.status(response.status).json({
-        error: data.error?.message || "Error Gemini",
-        raw: data
+        error: data.error?.message || "Gemini error",
+        raw: data,
       });
     }
 
     res.status(200).json(data);
 
   } catch (error) {
-    console.error("Error:", error);
-    res.status(500).json({ error: "Error interno" });
+    console.error("Server error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 }
