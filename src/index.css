@@ -2,11 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: #fff7ed;
-  color: #1e293b;
+/* Variables del tema por defecto (naranja) — ThemeContext las sobreescribe dinámicamente */
+:root {
+  --c-primary: #ea580c;
+  --c-primary-light: #fff7ed;
+  --c-primary-border: #fed7aa;
+  --c-primary-text: #9a3412;
+  --c-accent: #f97316;
+  --c-bg: #fff7ed;
+  --c-bg-dark: #1c0a00;
 }
+
+/* Dark mode base */
+.dark body {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* Scrollbar oculto en nav horizontal */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Animaciones */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-in-from-bottom-4 { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.animate-in { animation-duration: 0.4s; animation-fill-mode: both; }
+.fade-in { animation-name: fade-in; }
+.slide-in-from-bottom-4 { animation-name: slide-in-from-bottom-4; }

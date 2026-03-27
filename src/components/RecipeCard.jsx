@@ -1,14 +1,66 @@
 import { useState } from 'react';
-import { AlertTriangle, Apple, Bookmark, BookOpen, CheckCircle2, Clock, Heart, Info, MessageSquare, RefreshCw, Send, Star, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { AlertTriangle, Bookmark, BookOpen, CheckCircle2, ChefHat, Clock, Heart, Info, MessageSquare, RefreshCw, Send, Star, ThumbsDown, ThumbsUp, X, Zap } from 'lucide-react';
 import { useAppState } from '../context/appState.js';
-import { callGeminiAPI } from '../lib/gemini.js';
+
+// Barra de macro individual
+function MacroBar({ label, value, color, max }) {
+  const raw = parseFloat(String(value).replace(/[^\d.]/g, '')) || 0;
+  const pct = Math.min(100, (raw / max) * 100);
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center text-xs">
+        <span className="font-semibold text-slate-600 dark:text-slate-400">{label}</span>
+        <span className="font-bold text-slate-800 dark:text-white">{value || '—'}</span>
+      </div>
+      <div className="h-2 bg-slate-100 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+// Ingrediente individual con checkbox para marcar mientras cocinas
+function IngredientRow({ ing, index }) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <li
+      onClick={() => setChecked(c => !c)}
+      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer select-none transition-all ${
+        checked
+          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 opacity-60'
+          : 'bg-slate-50 dark:bg-gray-800 border-slate-100 dark:border-gray-700 hover:border-[--c-primary-border]'
+      }`}
+    >
+      <div className={`mt-0.5 w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${
+        checked ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-gray-500'
+      }`}>
+        {checked && <CheckCircle2 size={12} className="text-white" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-baseline gap-2">
+          <span className={`font-medium text-sm leading-tight ${checked ? 'line-through text-slate-400' : 'text-slate-800 dark:text-white'}`}>
+            {ing.name}
+          </span>
+          <span className="text-xs font-bold shrink-0 px-2 py-0.5 bg-white dark:bg-gray-700 rounded-md shadow-sm text-slate-500 dark:text-slate-300 border border-slate-100 dark:border-gray-600">
+            {ing.amount}
+          </span>
+        </div>
+        {ing.substitute && (
+          <div className="mt-1.5 text-xs flex gap-1 items-start" style={{ color: 'var(--c-primary)' }}>
+            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+            <span className="opacity-80">Sub: <strong>{ing.substitute}</strong></span>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
 
 export default function RecipeCard({ recipe }) {
   const { setProfile, savedMeals, setSavedMeals, favoriteRecipes, setFavoriteRecipes, interestedRecipes, setInterestedRecipes } = useAppState();
   const [chefQuestion, setChefQuestion] = useState('');
   const [chefAnswer, setChefAnswer] = useState('');
   const [asking, setAsking] = useState(false);
-
   const [feedbackGiven, setFeedbackGiven] = useState(false);
   const [feedbackType, setFeedbackType] = useState(null);
   const [feedbackReason, setFeedbackReason] = useState('');
@@ -21,7 +73,6 @@ export default function RecipeCard({ recipe }) {
     if (isSavedForPlan) setSavedMeals(savedMeals.filter(m => m.title !== recipe.title));
     else setSavedMeals([...(savedMeals || []), { title: recipe.title, calories: recipe.macros?.calories }]);
   };
-
   const toggleFavorite = () => {
     if (isFavorite) setFavoriteRecipes(favoriteRecipes.filter(r => r.title !== recipe.title));
     else {
@@ -29,7 +80,6 @@ export default function RecipeCard({ recipe }) {
       if (isInterested) setInterestedRecipes(interestedRecipes.filter(r => r.title !== recipe.title));
     }
   };
-
   const toggleInterested = () => {
     if (isInterested) setInterestedRecipes(interestedRecipes.filter(r => r.title !== recipe.title));
     else {
@@ -38,15 +88,11 @@ export default function RecipeCard({ recipe }) {
     }
   };
 
-  // FIX: ahora usa callGeminiAPI que tiene el formato correcto con role: "user"
   const askChef = async () => {
     if (!chefQuestion.trim()) return;
     setAsking(true);
-
-    const prompt = `El usuario está cocinando esta receta: "${recipe.title}". Ingredientes: ${recipe.ingredients ? recipe.ingredients.map(i => i.name).join(', ') : 'Desconocidos'}. Pregunta del usuario sobre el plato: "${chefQuestion}". Responde de forma concisa, útil y amable en un solo párrafo corto, asumiendo el rol de un chef experto. Devuelve SOLO el texto de la respuesta, sin JSON ni formato especial.`;
-
+    const prompt = `El usuario está cocinando: "${recipe.title}". Ingredientes: ${recipe.ingredients?.map(i => i.name).join(', ') || 'N/A'}. Pregunta: "${chefQuestion}". Responde en un párrafo corto y útil como chef experto. Solo texto, sin JSON.`;
     try {
-      // Llamamos directamente al backend con un payload de texto simple
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,11 +105,9 @@ export default function RecipeCard({ recipe }) {
         })
       });
       const data = await response.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      setChefAnswer(text || 'No tengo una respuesta para eso ahora.');
+      setChefAnswer(data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No tengo una respuesta ahora.');
     } catch (err) {
-      console.error(err);
-      setChefAnswer(err.message || 'Hubo un error de conexión con el Chef IA.');
+      setChefAnswer('Hubo un error de conexión.');
     } finally {
       setAsking(false);
       setChefQuestion('');
@@ -72,186 +116,187 @@ export default function RecipeCard({ recipe }) {
 
   const submitFeedback = () => {
     if (!feedbackReason.trim()) return;
-    const prefix = feedbackType === 'like' ? 'Le encantó (buscar sabores parecidos): ' : 'Evitar/No le gustó: ';
-    setProfile(prev => ({
-      ...prev,
-      learnedPreferences: [...prev.learnedPreferences, `${prefix} ${feedbackReason}`]
-    }));
+    const prefix = feedbackType === 'like' ? 'Le encantó: ' : 'Evitar/No le gustó: ';
+    setProfile(prev => ({ ...prev, learnedPreferences: [...prev.learnedPreferences, `${prefix}${feedbackReason}`] }));
     setFeedbackGiven(true);
   };
 
   if (!recipe) return null;
 
+  const calories = parseFloat(String(recipe.macros?.calories || '0').replace(/[^\d.]/g, '')) || 0;
+
   return (
-    <div className="bg-white rounded-3xl shadow-sm border border-orange-100 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-sm border border-slate-100 dark:border-gray-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-8 text-white relative">
-        <div className="absolute top-6 right-6 flex flex-col sm:flex-row gap-2">
-          <button onClick={toggleInterested} title="Me interesa para después" className={`p-2.5 rounded-full flex items-center justify-center transition-all shadow-md backdrop-blur-sm ${isInterested ? 'bg-blue-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white border border-white/20'}`}>
-            <Bookmark size={18} fill={isInterested ? 'currentColor' : 'none'} />
+      <div className="p-8 text-white relative" style={{ background: `linear-gradient(135deg, var(--c-primary), var(--c-accent))` }}>
+        <div className="absolute top-5 right-5 flex gap-2">
+          <button onClick={toggleInterested} title="Me interesa" className={`p-2.5 rounded-full transition-all shadow-md backdrop-blur-sm ${isInterested ? 'bg-blue-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white border border-white/20'}`}>
+            <Bookmark size={17} fill={isInterested ? 'currentColor' : 'none'} />
           </button>
-          <button onClick={toggleFavorite} title="Marcar como Favorito" className={`p-2.5 rounded-full flex items-center justify-center transition-all shadow-md backdrop-blur-sm ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white border border-white/20'}`}>
-            <Heart size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+          <button onClick={toggleFavorite} title="Favorito" className={`p-2.5 rounded-full transition-all shadow-md backdrop-blur-sm ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white border border-white/20'}`}>
+            <Heart size={17} fill={isFavorite ? 'currentColor' : 'none'} />
           </button>
-          <button onClick={toggleSaveForPlan} className={`px-4 py-2 rounded-full font-bold text-sm flex items-center gap-1.5 transition-all shadow-md backdrop-blur-sm ${isSavedForPlan ? 'bg-yellow-400 text-yellow-900' : 'bg-black/20 hover:bg-black/30 text-white border border-white/20'}`}>
-            <Star size={16} fill={isSavedForPlan ? 'currentColor' : 'none'} />
-            <span className="hidden sm:inline">{isSavedForPlan ? 'Fijada en Plan' : 'Añadir a Plan'}</span>
+          <button onClick={toggleSaveForPlan} className={`px-3 py-2 rounded-full font-bold text-sm flex items-center gap-1.5 transition-all shadow-md backdrop-blur-sm ${isSavedForPlan ? 'bg-yellow-400 text-yellow-900' : 'bg-black/20 hover:bg-black/30 text-white border border-white/20'}`}>
+            <Star size={15} fill={isSavedForPlan ? 'currentColor' : 'none'} />
+            <span className="hidden sm:inline text-xs">{isSavedForPlan ? 'En Plan' : '+ Plan'}</span>
           </button>
         </div>
 
-        <div className="flex justify-between items-start mb-4 mt-8 sm:mt-0">
-          <span className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium backdrop-blur-sm">{recipe.cuisine || 'Receta Adaptada'}</span>
-        </div>
-        <h2 className="text-3xl md:text-4xl font-bold mb-3 pr-24">{recipe.title}</h2>
-        <p className="text-orange-50 text-lg opacity-90">{recipe.description}</p>
-        <div className="flex flex-wrap gap-4 mt-6">
-          <div className="flex items-center gap-2 bg-black/10 px-4 py-2 rounded-xl backdrop-blur-sm">
-            <Clock size={18} />
-            <span className="font-medium">Prep: {recipe.prepTime || '?'} | Cocción: {recipe.cookTime || '?'}</span>
+        <span className="inline-block bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold mb-3 mt-8 sm:mt-0">
+          {recipe.cuisine || 'Receta IA'}
+        </span>
+        <h2 className="text-2xl md:text-3xl font-black mb-2 pr-20 leading-tight">{recipe.title}</h2>
+        <p className="text-white/80 text-sm leading-relaxed mb-5">{recipe.description}</p>
+
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-1.5 bg-black/15 px-3 py-1.5 rounded-xl text-xs font-medium backdrop-blur-sm">
+            <Clock size={14} /> Prep: {recipe.prepTime || '?'}
           </div>
+          <div className="flex items-center gap-1.5 bg-black/15 px-3 py-1.5 rounded-xl text-xs font-medium backdrop-blur-sm">
+            <ChefHat size={14} /> Cocción: {recipe.cookTime || '?'}
+          </div>
+          {calories > 0 && (
+            <div className="flex items-center gap-1.5 bg-black/15 px-3 py-1.5 rounded-xl text-xs font-medium backdrop-blur-sm">
+              <Zap size={14} /> {recipe.macros.calories}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="p-8">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
+      <div className="p-6 md:p-8">
 
-          {/* Ingredientes + Macros */}
-          <div className="md:col-span-5 space-y-6">
-            <div>
-              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4"><Apple className="text-orange-500" /> Ingredientes</h3>
-              <ul className="space-y-3">
-                {recipe.ingredients && recipe.ingredients.map((ing, i) => (
-                  <li key={`ing-${i}`} className="flex flex-col bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-slate-800">{ing.name}</span>
-                      <span className="text-sm text-slate-500 bg-white px-2 py-1 rounded-md shadow-sm">{ing.amount}</span>
-                    </div>
-                    {ing.substitute && (
-                      <div className="mt-2 text-xs text-orange-600 bg-orange-50 p-2 rounded-lg flex gap-1 items-start">
-                        <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                        <span>¿No tienes? Prueba con: <strong>{ing.substitute}</strong></span>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+        {/* Macros mejorados — barras de progreso */}
+        {recipe.macros && (
+          <div className="mb-8 bg-slate-50 dark:bg-gray-800 rounded-2xl p-5 border border-slate-100 dark:border-gray-700">
+            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4">Información Nutricional</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+              <MacroBar label="Proteína" value={recipe.macros.protein} color="bg-blue-500" max={60} />
+              <MacroBar label="Carbohidratos" value={recipe.macros.carbs} color="bg-amber-400" max={120} />
+              <MacroBar label="Grasa" value={recipe.macros.fat} color="bg-rose-400" max={50} />
+              <MacroBar label="Fibra" value={recipe.macros.fiber} color="bg-green-500" max={30} />
             </div>
+          </div>
+        )}
 
-            {recipe.macros && (
-              <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                <h4 className="font-bold text-slate-700 mb-3 text-sm uppercase tracking-wider">Información Nutricional</h4>
-                <div className="grid grid-cols-5 gap-2 text-center">
-                  {[
-                    { label: 'Cal', value: recipe.macros.calories, color: 'text-slate-700' },
-                    { label: 'Prot', value: recipe.macros.protein, color: 'text-slate-700' },
-                    { label: 'Carb', value: recipe.macros.carbs, color: 'text-slate-700' },
-                    { label: 'Grasa', value: recipe.macros.fat, color: 'text-slate-700' },
-                    { label: 'Fibra', value: recipe.macros.fiber, color: 'text-green-700' },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} className="bg-white p-2 rounded-lg shadow-sm flex flex-col justify-center">
-                      <div className="text-xs text-slate-400">{label}</div>
-                      <div className={`font-bold text-sm md:text-base truncate ${color}`}>{value || '-'}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+
+          {/* Ingredientes con checkboxes */}
+          <div className="md:col-span-5">
+            <h3 className="text-base font-black text-slate-800 dark:text-white mb-3 uppercase tracking-wide">
+              🛒 Ingredientes ({recipe.ingredients?.length || 0})
+            </h3>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">Toca para marcar mientras cocinas</p>
+            <ul className="space-y-2">
+              {recipe.ingredients?.map((ing, i) => (
+                <IngredientRow key={i} ing={ing} index={i} />
+              ))}
+            </ul>
           </div>
 
-          {/* Pasos + Feedback + Chef */}
-          <div className="md:col-span-7 space-y-8">
+          {/* Pasos */}
+          <div className="md:col-span-7 space-y-6">
             <div>
-              <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-6"><BookOpen className="text-orange-500" /> Preparación</h3>
-              <div className="space-y-6">
-                {recipe.steps && recipe.steps.map((step, i) => (
-                  <div key={`step-${i}`} className="flex gap-4">
-                    <div className="shrink-0 w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center">{i + 1}</div>
-                    <p className="text-slate-700 leading-relaxed pt-1">{typeof step === 'string' ? step : (step.text || step.description || JSON.stringify(step))}</p>
+              <h3 className="text-base font-black text-slate-800 dark:text-white mb-4 uppercase tracking-wide flex items-center gap-2">
+                <BookOpen size={18} style={{ color: 'var(--c-primary)' }} /> Preparación
+              </h3>
+              <div className="space-y-4">
+                {recipe.steps?.map((step, i) => (
+                  <div key={i} className="flex gap-4">
+                    <div className="shrink-0 w-7 h-7 rounded-full font-black text-sm flex items-center justify-center text-white" style={{ background: 'var(--c-primary)' }}>
+                      {i + 1}
+                    </div>
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed pt-0.5 text-sm">
+                      {typeof step === 'string' ? step : step.text || step.description || JSON.stringify(step)}
+                    </p>
                   </div>
                 ))}
               </div>
             </div>
 
             {recipe.tips && typeof recipe.tips === 'string' && (
-              <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 flex gap-3">
-                <Info className="text-blue-500 shrink-0" />
-                <p className="text-sm text-blue-900 leading-relaxed"><span className="font-bold">Tip del Chef: </span>{recipe.tips}</p>
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-2xl border border-blue-100 dark:border-blue-800 flex gap-3">
+                <Info className="text-blue-500 shrink-0 mt-0.5" size={16} />
+                <p className="text-sm text-blue-900 dark:text-blue-200 leading-relaxed">
+                  <span className="font-bold">Tip: </span>{recipe.tips}
+                </p>
               </div>
             )}
 
             {/* Feedback */}
-            <div className="bg-orange-50 p-6 rounded-2xl border border-orange-200">
-              <h4 className="font-bold text-orange-800 mb-2 flex items-center gap-2"><RefreshCw size={18} /> ¿Ya preparaste y comiste esto?</h4>
-              <p className="text-sm text-orange-700 mb-4">Danos tu opinión para que la IA mejore futuras recetas.</p>
+            <div className="rounded-2xl border p-5" style={{ background: 'var(--c-primary-light)', borderColor: 'var(--c-primary-border)' }}>
+              <h4 className="font-bold mb-1 text-sm flex items-center gap-2" style={{ color: 'var(--c-primary-text)' }}>
+                <RefreshCw size={15} /> ¿Ya la preparaste?
+              </h4>
+              <p className="text-xs mb-4 opacity-70" style={{ color: 'var(--c-primary-text)' }}>Tu opinión mejora las próximas recomendaciones.</p>
 
               {!feedbackGiven ? (
                 !feedbackType ? (
-                  <div className="flex gap-3">
-                    <button onClick={() => setFeedbackType('like')} className="px-4 py-3 bg-white border border-green-300 text-green-700 rounded-xl hover:bg-green-50 font-medium transition-colors flex-1 flex flex-col items-center gap-1 shadow-sm">
-                      <ThumbsUp size={24} /> Me encantó
+                  <div className="flex gap-2">
+                    <button onClick={() => setFeedbackType('like')} className="flex-1 flex flex-col items-center gap-1 py-3 bg-white dark:bg-gray-800 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-xl hover:bg-green-50 text-sm font-medium transition-colors">
+                      <ThumbsUp size={20} /> Me encantó
                     </button>
-                    <button onClick={() => setFeedbackType('dislike')} className="px-4 py-3 bg-white border border-red-300 text-red-700 rounded-xl hover:bg-red-50 font-medium transition-colors flex-1 flex flex-col items-center gap-1 shadow-sm">
-                      <ThumbsDown size={24} /> No me gustó
+                    <button onClick={() => setFeedbackType('dislike')} className="flex-1 flex flex-col items-center gap-1 py-3 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-50 text-sm font-medium transition-colors">
+                      <ThumbsDown size={20} /> No me gustó
                     </button>
                   </div>
                 ) : (
-                  <div className="animate-in slide-in-from-top-2">
-                    <label className={`block text-sm font-bold mb-2 ${feedbackType === 'like' ? 'text-green-800' : 'text-red-800'}`}>
-                      {feedbackType === 'like' ? '¡Genial! ¿Qué fue lo que más te gustó?' : '¡Lo sentimos! ¿Qué fue lo que no te gustó?'}
+                  <div className="space-y-2">
+                    <label className={`text-sm font-bold ${feedbackType === 'like' ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}`}>
+                      {feedbackType === 'like' ? '¿Qué fue lo mejor?' : '¿Qué no te gustó?'}
                     </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex gap-2">
                       <input
                         type="text"
                         value={feedbackReason}
                         onChange={e => setFeedbackReason(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && submitFeedback()}
-                        placeholder={feedbackType === 'like' ? 'Ej: El toque de ajo, la textura crocante...' : 'Ej: Odié el sabor del coliflor...'}
-                        className={`flex-1 p-3 rounded-xl border focus:ring-2 outline-none text-sm bg-white ${feedbackType === 'like' ? 'border-green-200 focus:ring-green-500' : 'border-red-200 focus:ring-red-500'}`}
+                        placeholder={feedbackType === 'like' ? 'Ej: El toque de ajo...' : 'Ej: Muy seco, sin sabor...'}
+                        className="flex-1 p-2.5 rounded-xl border text-sm outline-none bg-white dark:bg-gray-800 dark:text-white dark:border-gray-600 focus:ring-2"
+                        style={{ '--tw-ring-color': 'var(--c-primary)' }}
                       />
-                      <button onClick={submitFeedback} disabled={!feedbackReason.trim()} className={`px-6 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 shadow-sm ${feedbackType === 'like' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-                        Enseñar a la IA
+                      <button onClick={submitFeedback} disabled={!feedbackReason.trim()} className={`px-4 rounded-xl text-sm font-bold text-white disabled:opacity-50 ${feedbackType === 'like' ? 'bg-green-600' : 'bg-red-600'}`}>
+                        ✓
                       </button>
-                      <button onClick={() => { setFeedbackType(null); setFeedbackReason(''); }} className="p-3 text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-xl">
-                        <X size={18} />
+                      <button onClick={() => { setFeedbackType(null); setFeedbackReason(''); }} className="p-2.5 text-slate-400 bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-600 rounded-xl">
+                        <X size={16} />
                       </button>
                     </div>
                   </div>
                 )
               ) : (
-                <div className="text-sm font-medium text-green-700 bg-green-100 p-4 rounded-xl flex items-center gap-2 border border-green-200">
-                  <CheckCircle2 size={18} /> ¡Perfecto! He guardado tu opinión en tu perfil.
+                <div className="text-sm font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 p-3 rounded-xl flex items-center gap-2">
+                  <CheckCircle2 size={16} /> ¡Guardado en tu perfil!
                 </div>
               )}
             </div>
 
             {/* Ask the Chef */}
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-              <h4 className="font-bold text-slate-800 mb-3 flex items-center gap-2"><MessageSquare size={18} className="text-orange-500" /> ✨ Pregúntale al Chef IA</h4>
-              <p className="text-sm text-slate-500 mb-4">¿Dudas sobre un reemplazo? ¿Técnicas de preparación? ¡Consulta al chef!</p>
-
+            <div className="bg-slate-50 dark:bg-gray-800 p-5 rounded-2xl border border-slate-200 dark:border-gray-700">
+              <h4 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2 text-sm">
+                <MessageSquare size={16} style={{ color: 'var(--c-primary)' }} /> Pregúntale al Chef IA
+              </h4>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">¿Dudas sobre técnica, sustitutos o tiempos?</p>
               {chefAnswer && (
-                <div className="mb-4 p-4 bg-orange-100 text-orange-900 rounded-xl text-sm border border-orange-200 animate-in fade-in">
+                <div className="mb-3 p-3 rounded-xl text-sm border animate-in fade-in" style={{ background: 'var(--c-primary-light)', borderColor: 'var(--c-primary-border)', color: 'var(--c-primary-text)' }}>
                   <span className="font-bold block mb-1">👨‍🍳 Chef:</span>
                   {chefAnswer}
                 </div>
               )}
-
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={chefQuestion}
                   onChange={e => setChefQuestion(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && askChef()}
-                  placeholder="Ej: ¿A cuántos grados precaliento el horno?"
-                  className="flex-1 p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-orange-500 outline-none text-sm bg-white"
+                  placeholder="Ej: ¿A cuántos grados el horno?"
+                  className="flex-1 p-2.5 rounded-xl border border-slate-200 dark:border-gray-600 text-sm outline-none bg-white dark:bg-gray-700 dark:text-white focus:ring-2"
                 />
-                <button onClick={askChef} disabled={asking || !chefQuestion.trim()} className="bg-slate-800 hover:bg-slate-900 text-white px-5 rounded-xl font-bold transition-all disabled:opacity-70 flex items-center gap-2">
-                  {asking ? <RefreshCw className="animate-spin" size={18} /> : <Send size={18} />}
+                <button onClick={askChef} disabled={asking || !chefQuestion.trim()} className="bg-slate-800 dark:bg-slate-600 hover:bg-slate-900 text-white px-4 rounded-xl disabled:opacity-60 flex items-center">
+                  {asking ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />}
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       </div>
