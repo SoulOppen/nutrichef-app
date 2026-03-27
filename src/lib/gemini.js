@@ -120,12 +120,14 @@ export async function callGeminiAPI(promptText, cacheKey = null) {
       throw new Error("La IA no devolvió texto");
     }
 
-    const cleanText = textResult
-      .replace(/```json/gi, '')
-      .replace(/```/g, '')
-      .trim();
+    // Extraer el bloque JSON aunque venga envuelto en markdown u otro texto
+    const jsonMatch = textResult.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("Respuesta cruda de Gemini:", textResult);
+      throw new Error("La IA no devolvio un JSON valido");
+    }
 
-    const parsed = JSON.parse(cleanText);
+    const parsed = JSON.parse(jsonMatch[0]);
 
     if (cacheKey) {
       cache[cacheKey] = parsed;
