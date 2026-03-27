@@ -8,7 +8,7 @@ import { ROUTES } from '../routes/paths.js';
 const MODES = [
   { id: 'text', label: 'Texto libre', icon: Type, description: 'Pega cualquier receta escrita' },
   { id: 'url', label: 'URL web', icon: Globe, description: 'Link de cualquier receta online' },
-  { id: 'instagram', label: 'Instagram', description: 'Descripción del post o caption', icon: Instagram },
+  { id: 'instagram', label: 'FaInstagram', description: 'Descripción del post o caption', icon: Instagram },
   { id: 'photo', label: 'Foto', icon: Camera, description: 'Escanea una receta con la cámara' },
 ];
 
@@ -30,7 +30,7 @@ function buildPrompt(mode, input) {
 
   if (mode === 'text') return instructions + input;
   if (mode === 'url') return instructions + `URL de la receta: ${input}\nExtrae la receta de esta URL y estructúrala.`;
-  if (mode === 'instagram') return instructions + `Caption/descripción de Instagram:\n${input}`;
+  if (mode === 'instagram') return instructions + `Caption/descripción de FaInstagram:\n${input}`;
   return null; // foto se maneja aparte
 }
 
@@ -136,7 +136,7 @@ export default function AddRecipeView() {
   const placeholders = {
     text: 'Pega aquí la receta completa — ingredientes, cantidades, pasos...\n\nEj:\nTortilla de patatas\n\nIngredientes:\n- 3 huevos\n- 2 patatas medianas\n- 1/2 cebolla\n...',
     url: 'https://www.recetasgratis.net/...',
-    instagram: 'Pega aquí el caption o descripción del post de Instagram con la receta...',
+    Fainstagram: 'Pega aquí el caption o descripción del post de FaInstagram con la receta...',
   };
 
   return (
@@ -206,7 +206,7 @@ export default function AddRecipeView() {
           ) : (
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                {mode === 'instagram' ? 'Caption de Instagram' : 'Texto de la receta'}
+                {mode === 'Fainstagram' ? 'Caption de FaInstagram' : 'Texto de la receta'}
               </label>
               <textarea
                 value={input}
