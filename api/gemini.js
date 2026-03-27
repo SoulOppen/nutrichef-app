@@ -4,63 +4,37 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Missing API key" });
     }
 
-    const { kind, payload } = req.body || {};
+    // El cliente ya envía el body en formato Gemini válido dentro de `payload`.
+    // Solo lo re-enviamos tal cual, sin re-envolver.
+    const { payload } = req.body || {};
 
     if (!payload) {
       return res.status(400).json({ error: "Missing payload" });
     }
 
-    // 🔥 CONVERTIMOS SIEMPRE A FORMATO GEMINI VÁLIDO
-    let promptText;
-
-    if (typeof payload === "string") {
-      promptText = payload;
-    } else if (payload?.prompt) {
-      promptText = payload.prompt;
-    } else {
-      promptText = JSON.stringify(payload);
-    }
-
-    const geminiBody = {
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              text: promptText
-            }
-          ]
-        }
-      ]
-    };
-
-    console.log("SENDING TO GEMINI:", JSON.stringify(geminiBody));
-
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(geminiBody)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       }
     );
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("GEMINI ERROR:", data);
+      console.error("GEMINI ERROR:", JSON.stringify(data));
       return res.status(response.status).json({
         error: data.error?.message,
-        raw: data
+        raw: data,
       });
     }
 
-    res.status(200).json(data);
+    return res.status(200).json(data);
 
   } catch (error) {
     console.error("SERVER ERROR:", error);
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 }
