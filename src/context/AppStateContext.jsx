@@ -27,7 +27,6 @@ const DEFAULT_PROFILE = {
   learnedPreferences: []
 };
 
-// Guarda en Firestore con debounce para no escribir en cada tecla
 function useFirestoreSync(uid, key, value, ready) {
   useEffect(() => {
     if (!uid || !ready) return;
@@ -49,7 +48,6 @@ export function AppStateProvider({ children }) {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [firestoreReady, setFirestoreReady] = useState(false);
 
-  // Cargar datos desde Firestore cuando el usuario se autentica
   useEffect(() => {
     if (!uid) {
       setFirestoreReady(false);
@@ -63,10 +61,11 @@ export function AppStateProvider({ children }) {
         const data = snap.data();
         if (data.profile) setProfile({ ...DEFAULT_PROFILE, ...data.profile });
         if (data.favoriteRecipes) setFavoriteRecipes(data.favoriteRecipes);
+        if (data.interestedRecipes) setInterestedRecipes(data.interestedRecipes);
         if (data.plan) setPlan(data.plan);
         if (data.savedMeals) setSavedMeals(data.savedMeals);
       } else {
-        // Usuario nuevo: migrar datos de localStorage si existen
+        // Usuario nuevo: migrar desde localStorage si existe
         const localProfile = readStoredJson('nutrichef_profile', null);
         const localFavs = readStoredJson('nutrichef_favs', []);
         if (localProfile) setProfile({ ...DEFAULT_PROFILE, ...localProfile });
@@ -76,23 +75,19 @@ export function AppStateProvider({ children }) {
     });
   }, [uid]);
 
-  // Sincronizar cambios a Firestore
+  // Sincronizar todo a Firestore — ahora incluye interestedRecipes
   useFirestoreSync(uid, 'profile', profile, firestoreReady);
   useFirestoreSync(uid, 'favoriteRecipes', favoriteRecipes, firestoreReady);
+  useFirestoreSync(uid, 'interestedRecipes', interestedRecipes, firestoreReady);
   useFirestoreSync(uid, 'plan', plan, firestoreReady);
   useFirestoreSync(uid, 'savedMeals', savedMeals, firestoreReady);
 
   const value = useMemo(() => ({
-    plan,
-    setPlan,
-    savedMeals,
-    setSavedMeals,
-    favoriteRecipes,
-    setFavoriteRecipes,
-    interestedRecipes,
-    setInterestedRecipes,
-    profile,
-    setProfile,
+    plan, setPlan,
+    savedMeals, setSavedMeals,
+    favoriteRecipes, setFavoriteRecipes,
+    interestedRecipes, setInterestedRecipes,
+    profile, setProfile,
     firestoreReady,
   }), [plan, savedMeals, favoriteRecipes, interestedRecipes, profile, firestoreReady]);
 

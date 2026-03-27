@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { ChefHat } from 'lucide-react';
 import AppLayout from './components/layout/AppLayout.jsx';
 import { AppStateProvider } from './context/AppStateContext.jsx';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
@@ -10,24 +11,28 @@ import ProfileView from './views/ProfileView.jsx';
 import SavedView from './views/SavedView.jsx';
 import LoginView from './views/LoginView.jsx';
 
+// Pantalla de carga con identidad visual en lugar de spinner vacío
+function SplashScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-amber-50">
+      <div className="flex flex-col items-center gap-5 animate-pulse">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-orange-500 rounded-3xl shadow-lg rotate-3">
+          <ChefHat size={42} className="text-white" />
+        </div>
+        <h1 className="text-2xl font-black text-slate-700 tracking-tight">
+          NutriChef <span className="text-orange-500">IA</span>
+        </h1>
+      </div>
+    </div>
+  );
+}
+
 function AppRoutes() {
   const { user } = useAuth();
 
-  // Mientras Firebase verifica la sesión, no renderizamos nada
-  if (user === undefined) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-950">
-        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (user === undefined) return <SplashScreen />;
+  if (user === null) return <LoginView />;
 
-  // No autenticado → pantalla de login
-  if (user === null) {
-    return <LoginView />;
-  }
-
-  // Autenticado → app normal
   return (
     <AppStateProvider>
       <Routes>
