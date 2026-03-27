@@ -1,14 +1,25 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, ChevronRight, Globe, RefreshCw, Type, X } from 'lucide-react';
-import { FaInstagram } from 'react-icons/fa';
 import { useAppState } from '../context/appState.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
 
+
+// Ícono SVG de Instagram (sin dependencias externas)
+function InstagramIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <circle cx="12" cy="12" r="4"/>
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+    </svg>
+  );
+}
+
 const MODES = [
   { id: 'text', label: 'Texto libre', icon: Type, description: 'Pega cualquier receta escrita' },
   { id: 'url', label: 'URL web', icon: Globe, description: 'Link de cualquier receta online' },
-  { id: 'instagram', label: 'FaInstagram', description: 'Descripción del post o caption', icon: Instagram },
+  { id: 'instagram', label: 'Instagram', description: 'Descripción del post o caption', icon: InstagramIcon },
   { id: 'photo', label: 'Foto', icon: Camera, description: 'Escanea una receta con la cámara' },
 ];
 
@@ -30,7 +41,7 @@ function buildPrompt(mode, input) {
 
   if (mode === 'text') return instructions + input;
   if (mode === 'url') return instructions + `URL de la receta: ${input}\nExtrae la receta de esta URL y estructúrala.`;
-  if (mode === 'instagram') return instructions + `Caption/descripción de FaInstagram:\n${input}`;
+  if (mode === 'instagram') return instructions + `Caption/descripción de Instagram:\n${input}`;
   return null; // foto se maneja aparte
 }
 
@@ -136,7 +147,7 @@ export default function AddRecipeView() {
   const placeholders = {
     text: 'Pega aquí la receta completa — ingredientes, cantidades, pasos...\n\nEj:\nTortilla de patatas\n\nIngredientes:\n- 3 huevos\n- 2 patatas medianas\n- 1/2 cebolla\n...',
     url: 'https://www.recetasgratis.net/...',
-    Fainstagram: 'Pega aquí el caption o descripción del post de FaInstagram con la receta...',
+    instagram: 'Pega aquí el caption o descripción del post de Instagram con la receta...',
   };
 
   return (
@@ -206,7 +217,7 @@ export default function AddRecipeView() {
           ) : (
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                {mode === 'Fainstagram' ? 'Caption de FaInstagram' : 'Texto de la receta'}
+                {mode === 'instagram' ? 'Caption de Instagram' : 'Texto de la receta'}
               </label>
               <textarea
                 value={input}
