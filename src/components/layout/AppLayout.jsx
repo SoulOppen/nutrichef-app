@@ -1,5 +1,6 @@
-import { Bookmark, Calendar, ChefHat, Compass, PlusCircle, Settings, Utensils } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Bookmark, Calendar, ChefHat, Compass, LogOut, PlusCircle, Settings, Utensils, User } from 'lucide-react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../routes/paths.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import TipsWidget from '../TipsWidget.jsx';
@@ -10,53 +11,118 @@ const NAV_ITEMS = [
   { to: '/add-recipe', label: 'Agregar', icon: PlusCircle },
   { to: ROUTES.saved, label: 'Guardados', icon: Bookmark },
   { to: ROUTES.plan, label: 'Plan', icon: Calendar },
-  { to: ROUTES.profile, label: 'Perfil', icon: Settings },
+];
+
+// En mobile, Perfil y Configuración van en el bottom nav
+const MOBILE_EXTRA = [
+  { to: ROUTES.profile, label: 'Perfil', icon: User },
+  { to: ROUTES.settings, label: 'Config', icon: Settings },
 ];
 
 function desktopNavClass({ isActive }) {
-  return `flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-full text-sm font-bold transition-all ${
+  return `flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-bold transition-all ${
     isActive
       ? 'bg-[--c-primary-light] text-[--c-primary] shadow-sm'
-      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-800 hover:text-slate-700'
+      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-gray-800'
   }`;
 }
 
 function mobileNavClass({ isActive }) {
-  return `flex flex-col items-center justify-center gap-1 py-2 px-2 flex-1 transition-all ${
+  return `flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 transition-all ${
     isActive ? 'text-[--c-primary]' : 'text-slate-400 dark:text-slate-500'
   }`;
 }
 
+// Menú desplegable del avatar
+function AvatarMenu({ user, isLocalMode, onClose }) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const go = (path) => { onClose(); navigate(path); };
+
+  return (
+    <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-gray-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+      {/* User info */}
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-gray-800">
+        <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{user?.displayName || (isLocalMode ? 'Modo Local' : 'Usuario')}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{user?.email || 'Sin cuenta'}</p>
+      </div>
+
+      {/* Opciones */}
+      <div className="py-1">
+        <button onClick={() => go(ROUTES.profile)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
+          <User size={16} className="text-slate-400" /> Mi Perfil
+        </button>
+        <button onClick={() => go(ROUTES.settings)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
+          <Settings size={16} className="text-slate-400" /> Configuración
+        </button>
+        <div className="border-t border-slate-100 dark:border-gray-800 mt-1 pt-1">
+          <button onClick={() => { onClose(); logout(); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <LogOut size={16} /> Cerrar sesión
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppLayout() {
-  const { user } = useAuth();
+  const { user, isLocalMode } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Cerrar menú al clicar fuera
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const ALL_MOBILE_ITEMS = [...NAV_ITEMS, ...MOBILE_EXTRA];
 
   return (
     <div className="min-h-screen bg-[--c-bg] dark:bg-gray-950 text-slate-800 dark:text-slate-100 font-sans pb-20 md:pb-12 transition-colors duration-200">
-      <header className="bg-white dark:bg-gray-900 shadow-sm dark:shadow-gray-800 sticky top-0 z-20 border-b border-slate-100 dark:border-gray-800">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <NavLink to={ROUTES.create} className="flex items-center gap-2" style={{ color: 'var(--c-primary)' }}>
-            <ChefHat size={28} />
-            <h1 className="text-xl font-bold tracking-tight">NutriChef IA</h1>
+
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-20 border-b border-slate-100 dark:border-gray-800">
+        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+
+          {/* Logo */}
+          <NavLink to={ROUTES.create} className="flex items-center gap-2 shrink-0" style={{ color: 'var(--c-primary)' }}>
+            <ChefHat size={26} />
+            <h1 className="text-lg font-black tracking-tight hidden sm:block">NutriChef IA</h1>
           </NavLink>
 
-          <nav className="hidden sm:flex gap-1 md:gap-1">
-            {NAV_ITEMS.map((item) => (
+          {/* Nav desktop */}
+          <nav className="hidden sm:flex gap-1 flex-1 justify-center">
+            {NAV_ITEMS.map(item => (
               <NavLink key={item.to} to={item.to} className={desktopNavClass}>
-                <item.icon size={18} />
+                <item.icon size={17} />
                 <span className="hidden lg:inline">{item.label}</span>
               </NavLink>
             ))}
           </nav>
 
-          {user?.photoURL && (
-            <img
-              src={user.photoURL}
-              alt={user.displayName || 'Usuario'}
-              title={user.displayName || ''}
-              className="w-9 h-9 rounded-full border-2 shadow-sm hidden sm:block"
-              style={{ borderColor: 'var(--c-primary-border)' }}
-            />
-          )}
+          {/* Avatar con menú desplegable */}
+          <div ref={menuRef} className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              className="flex items-center gap-2 p-1 rounded-full hover:ring-2 transition-all"
+              style={{ '--tw-ring-color': 'var(--c-primary-border)' }}
+              aria-label="Menú de usuario"
+            >
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt={user.displayName || 'Avatar'} className="w-8 h-8 rounded-full border-2" style={{ borderColor: 'var(--c-primary-border)' }} />
+              ) : (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: 'var(--c-primary)' }}>
+                  {user?.displayName?.[0] || (isLocalMode ? '?' : 'U')}
+                </div>
+              )}
+            </button>
+
+            {menuOpen && <AvatarMenu user={user} isLocalMode={isLocalMode} onClose={() => setMenuOpen(false)} />}
+          </div>
         </div>
       </header>
 
@@ -64,20 +130,16 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* Widget flotante de tips — visible en todas las pantallas */}
+      {/* Tips widget */}
       <TipsWidget />
 
       {/* Bottom nav mobile */}
       <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-slate-100 dark:border-gray-800 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-20 flex">
-        {NAV_ITEMS.map((item) => (
+        {ALL_MOBILE_ITEMS.map(item => (
           <NavLink key={item.to} to={item.to} className={mobileNavClass}>
             {({ isActive }) => (
               <>
-                <item.icon
-                  size={21}
-                  strokeWidth={isActive ? 2.5 : 1.8}
-                  style={isActive ? { color: 'var(--c-primary)' } : {}}
-                />
+                <item.icon size={20} strokeWidth={isActive ? 2.5 : 1.8} style={isActive ? { color: 'var(--c-primary)' } : {}} />
                 <span className="text-[9px] font-semibold">{item.label}</span>
               </>
             )}

@@ -5,4 +5,6 @@ export const ROUTES = {
   saved: '/saved',
   plan: '/plan',
   profile: '/profile',
+  settings: '/settings',
+  onboarding: '/onboarding',
 };
