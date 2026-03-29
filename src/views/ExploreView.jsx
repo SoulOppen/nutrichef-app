@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { ChefHat, ChevronRight, Compass, RefreshCw, Search, Sparkles } from 'lucide-react';
+import { ChefHat, ChevronRight, Compass, RefreshCw, Search, Sparkles, Zap } from 'lucide-react';
 import RecipeCard from '../components/RecipeCard.jsx';
 import { useAppState } from '../context/appState.js';
-import {
-  callGeminiAPI,
-  compactProfile,
-  buildExploreCacheKey,
-  buildGeneratorRecipeCacheKey,
-  EXPLORE_CACHE_KEY,
-  GENERATOR_RECIPE_CACHE_KEY,
-} from '../lib/gemini.js';
+import { callGeminiAPI, compactProfile, buildExploreCacheKey, buildGeneratorRecipeCacheKey, EXPLORE_CACHE_KEY, GENERATOR_RECIPE_CACHE_KEY } from '../lib/gemini.js';
+import { searchLocalRecipes, POPULAR_RECIPES } from '../lib/localRecipes.js';
+
+// Recetas populares para mostrar en el estado vacío (sin búsqueda)
+const QUICK_PICKS = POPULAR_RECIPES.slice(0, 6).map(r => ({
+  id: r.title,
+  name: r.title,
+  type: r.cuisine,
+  description: r.description,
+  _local: r,
+}));
 
 export default function ExploreView() {
   const { profile, favoriteRecipes } = useAppState();
@@ -18,57 +21,61 @@ export default function ExploreView() {
   const [recipe, setRecipe] = useState(null);
   const [suggestions, setSuggestions] = useState(null);
   const [generatingRecipe, setGeneratingRecipe] = useState(false);
+  const [sourceLabel, setSourceLabel] = useState(''); // 'local' | 'ia'
 
   const profileStr = compactProfile(profile);
-  const favStr = favoriteRecipes.length > 0 ? favoriteRecipes.map(r => r.title).join(', ') : '';
 
-  const handleDirectSearch = async () => {
+  // Búsqueda unificada: primero local, luego IA si no hay resultados
+  const handleSearch = async () => {
     if (!query.trim()) return;
-    setLoading(true);
+
     setRecipe(null);
     setSuggestions(null);
+    setSourceLabel('');
 
-    const cacheKey = buildExploreCacheKey({ query, mode: 'direct', profile });
-
-    const prompt = `Genera 3 variaciones saludables de "${query}" para este perfil: ${profileStr}${favStr ? `. Inspirate en: ${favStr}` : ''}.
-Devuelve SOLO este JSON:
-{"suggestions":[{"id":1,"name":"...","type":"...","description":"..."}]}`;
-
-    try {
-      const result = await callGeminiAPI(prompt, cacheKey, EXPLORE_CACHE_KEY, 400);
-      setSuggestions(result.suggestions);
-    } catch (err) {
-      console.error(err);
-      setSuggestions([{ id: 'error', name: 'Error', type: 'Error', description: err.message }]);
-    } finally {
-      setLoading(false);
+    // 1. Buscar en el banco local primero (cero tokens)
+    const localResults = searchLocalRecipes(query);
+    if (localResults.length > 0) {
+      setSuggestions(localResults.map(r => ({
+        id: r.title,
+        name: r.title,
+        type: r.cuisine,
+        description: r.description,
+        _local: r,
+      })));
+      setSourceLabel('local');
+      return;
     }
-  };
 
-  const handleSuggest = async () => {
-    if (!query.trim()) return;
+    // 2. Si no hay resultados locales, usar Gemini
     setLoading(true);
-    setRecipe(null);
-    setSuggestions(null);
+    setSourceLabel('ia');
 
-    const cacheKey = buildExploreCacheKey({ query, mode: 'suggest', profile });
+    const cacheKey = buildExploreCacheKey({ query, mode: 'unified', profile });
 
-    const prompt = `El usuario quiere: "${query}". Genera 3 sugerencias para este perfil: ${profileStr}${favStr ? `. Le gustan: ${favStr}` : ''}.
+    const prompt = `El usuario busca: "${query}". Genera 3 opciones de platos o recetas que satisfagan esto, adaptadas a su perfil: ${profileStr}${favoriteRecipes.length > 0 ? `. Le gustan: ${favoriteRecipes.map(r => r.title).join(', ')}` : ''}.
 Devuelve SOLO este JSON:
 {"suggestions":[{"id":1,"name":"...","type":"...","description":"..."}]}`;
 
     try {
-      const result = await callGeminiAPI(prompt, cacheKey, EXPLORE_CACHE_KEY, 400);
+      const result = await callGeminiAPI(prompt, cacheKey, EXPLORE_CACHE_KEY);
       setSuggestions(result.suggestions);
     } catch (err) {
       console.error(err);
-      setSuggestions([{ id: 'error', name: 'Error', type: 'Error', description: err.message }]);
+      setSuggestions([{ id: 'error', name: 'Error al buscar', type: 'Error', description: err.message }]);
     } finally {
       setLoading(false);
     }
   };
 
   const generateFromSuggestion = async (sugg) => {
+    // Si la receta viene del banco local, mostrarla directo sin llamar a Gemini
+    if (sugg._local) {
+      setRecipe(sugg._local);
+      setSuggestions(null);
+      return;
+    }
+
     setGeneratingRecipe(true);
     setSuggestions(null);
 
@@ -83,7 +90,7 @@ Devuelve SOLO este JSON:
 {"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","ingredients":[{"name":"...","amount":"...","substitute":"..."}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"..."}`;
 
     try {
-      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY, 900);
+      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY);
       setRecipe(result);
     } catch (err) {
       console.error(err);
@@ -94,66 +101,129 @@ Devuelve SOLO este JSON:
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-8 rounded-3xl shadow-md text-white text-center">
-        <Compass size={40} className="mx-auto mb-4 opacity-90" />
-        <h2 className="text-3xl font-bold mb-3">Explora y Antójate</h2>
-        <p className="text-indigo-100 mb-6 max-w-lg mx-auto">Busca la receta de un plato específico o dinos qué se te antoja.</p>
 
-        <div className="flex flex-col sm:flex-row gap-3 bg-white/10 p-2 rounded-2xl md:rounded-full backdrop-blur-md max-w-2xl mx-auto border border-white/20">
+      {/* Header con búsqueda unificada */}
+      <div className="p-8 rounded-3xl shadow-md text-white text-center" style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}>
+        <Compass size={40} className="mx-auto mb-4 opacity-90" />
+        <h2 className="text-3xl font-bold mb-2">Explorar</h2>
+        <p className="text-indigo-100 mb-6 max-w-lg mx-auto text-sm">
+          Escribe un plato, un ingrediente o lo que se te antoje. Busca primero en recetas guardadas, luego con IA.
+        </p>
+
+        <div className="flex gap-2 bg-white/10 p-2 rounded-2xl backdrop-blur-md max-w-2xl mx-auto border border-white/20">
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleDirectSearch()}
-            placeholder="¿Qué quieres comer hoy?"
-            className="flex-1 bg-transparent text-white placeholder:text-indigo-200 px-4 py-2 outline-none"
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            placeholder='Ej: "papas fritas", "algo con pollo", "postre rápido"...'
+            className="flex-1 bg-transparent text-white placeholder:text-indigo-300 px-4 py-2 outline-none text-sm"
           />
-          <div className="flex gap-2">
-            <button onClick={handleDirectSearch} disabled={loading || !query.trim()} className="flex-1 sm:flex-none bg-white text-indigo-600 px-5 py-2.5 rounded-xl md:rounded-full font-bold hover:bg-indigo-50 transition-colors disabled:opacity-50 flex justify-center items-center gap-2 shadow-sm">
-              <Search size={18} /> Directa
-            </button>
-            <button onClick={handleSuggest} disabled={loading || !query.trim()} className="flex-1 sm:flex-none bg-indigo-700 hover:bg-indigo-800 text-white px-5 py-2.5 rounded-xl md:rounded-full font-bold transition-colors disabled:opacity-50 flex justify-center items-center gap-2 shadow-sm">
-              <Sparkles size={18} /> Sugerencias
-            </button>
-          </div>
+          <button
+            onClick={handleSearch}
+            disabled={loading || !query.trim()}
+            className="bg-white text-indigo-600 px-5 py-2.5 rounded-xl font-bold hover:bg-indigo-50 transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm shrink-0"
+          >
+            <Search size={18} /> Buscar
+          </button>
         </div>
       </div>
 
+      {/* Estado de carga */}
       {loading && (
         <div className="flex flex-col items-center justify-center py-12 text-indigo-500">
           <RefreshCw className="animate-spin mb-4" size={40} />
-          <p className="font-medium animate-pulse">Explorando opciones deliciosas...</p>
+          <p className="font-medium animate-pulse">Buscando con IA...</p>
         </div>
       )}
 
+      {/* Sugerencias (locales o de IA) */}
       {suggestions && !recipe && !generatingRecipe && (
-        <div className="grid md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-          {suggestions.map((sugg) => (
-            <div key={sugg.id} className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-indigo-100 dark:border-gray-700 flex flex-col hover:shadow-md transition-shadow">
-              <span className="text-xs font-bold text-purple-600 bg-purple-100 dark:bg-purple-900/30 px-3 py-1 rounded-full w-max mb-3">{sugg.type}</span>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{sugg.name}</h3>
-              <p className="text-slate-600 dark:text-slate-400 text-sm mb-6 flex-1">{sugg.description}</p>
-              <button onClick={() => generateFromSuggestion(sugg)} className="w-full py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-semibold rounded-xl hover:bg-indigo-600 hover:text-white transition-colors flex items-center justify-center gap-2">
-                <ChefHat size={18} /> Ver Receta
-              </button>
-            </div>
-          ))}
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
+          {/* Badge indicando la fuente */}
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-white">Resultados para "{query}"</h3>
+            {sourceLabel === 'local' && (
+              <span className="flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
+                <Zap size={11} /> Instantáneo
+              </span>
+            )}
+            {sourceLabel === 'ia' && (
+              <span className="flex items-center gap-1 text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded-full">
+                <Sparkles size={11} /> Generado con IA
+              </span>
+            )}
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-4">
+            {suggestions.map(sugg => (
+              <div key={sugg.id} className="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 rounded-full">
+                    {sugg.type}
+                  </span>
+                  {sugg._local && <Zap size={13} className="text-green-500 shrink-0" title="Receta local, sin IA" />}
+                </div>
+                <h3 className="font-bold text-slate-800 dark:text-white mb-1 leading-tight">{sugg.name}</h3>
+                <p className="text-slate-500 dark:text-slate-400 text-xs mb-4 flex-1 leading-relaxed">{sugg.description}</p>
+                <button
+                  onClick={() => generateFromSuggestion(sugg)}
+                  className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-semibold rounded-xl hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  <ChefHat size={16} /> Ver receta
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Generando receta con IA */}
       {generatingRecipe && !recipe && (
         <div className="flex flex-col items-center justify-center py-12 text-indigo-500">
           <RefreshCw className="animate-spin mb-4" size={40} />
-          <p className="font-medium animate-pulse">Escribiendo el paso a paso...</p>
+          <p className="font-medium animate-pulse">Generando receta...</p>
         </div>
       )}
 
+      {/* Receta */}
       {recipe && (
         <div>
-          <button onClick={() => setRecipe(null)} className="mb-4 text-indigo-600 font-medium flex items-center gap-1 hover:underline">
-            <ChevronRight className="rotate-180" size={18} /> Volver a explorar
+          <button
+            onClick={() => { setRecipe(null); setSuggestions(suggestions); }}
+            className="mb-4 text-indigo-600 dark:text-indigo-400 font-medium flex items-center gap-1 hover:underline"
+          >
+            <ChevronRight className="rotate-180" size={18} /> Volver
           </button>
           <RecipeCard recipe={recipe} />
+        </div>
+      )}
+
+      {/* Estado vacío — recetas rápidas populares sin búsqueda */}
+      {!loading && !suggestions && !recipe && !generatingRecipe && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 flex items-center gap-2">
+            <Zap size={14} className="text-green-500" /> Recetas rápidas — sin IA
+          </h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {QUICK_PICKS.map(sugg => (
+              <div
+                key={sugg.id}
+                onClick={() => generateFromSuggestion(sugg)}
+                className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-slate-100 dark:border-gray-700 cursor-pointer hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-start justify-between mb-1">
+                  <span className="text-[10px] font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full">{sugg.type}</span>
+                  <Zap size={12} className="text-green-400" />
+                </div>
+                <p className="font-bold text-sm text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{sugg.name}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 leading-tight">{sugg.description}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-center text-slate-400 dark:text-slate-500">
+            Búscalas arriba o escribe cualquier plato para que la IA genere opciones personalizadas.
+          </p>
         </div>
       )}
     </div>
