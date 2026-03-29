@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  collection, doc, getDoc, getDocs, setDoc, addDoc, query, orderBy, limit,
+  collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
+  query, orderBy, limit,
 } from 'firebase/firestore';
 import { AppStateContext } from './appState.js';
 import { db } from '../lib/firebase.js';
@@ -10,11 +11,9 @@ import { readStoredJson, writeStoredJson } from '../lib/gemini.js';
 export const DEFAULT_PROFILE = {
   weight: '', height: '', age: '', gender: 'Femenino',
   activityLevel: '1.2',
-  // --- nuevo: deporte ---
-  sportType: 'Ninguno',           // Ninguno | Cardio | Fuerza/Powerlifting | Crossfit | HIIT | Deportes de equipo
-  trainingDuration: '60',         // minutos por sesión
-  trainingDaysPerWeek: '3',       // días/semana
-  // ----------------------
+  sportType: 'Ninguno',
+  trainingDuration: '60',
+  trainingDaysPerWeek: '3',
   dailyCalories: '', manualCalories: false,
   proteinTarget: '', manualProtein: false,
   fiberTarget: '', manualFiber: false,
@@ -23,9 +22,9 @@ export const DEFAULT_PROFILE = {
   goals: 'Mantenimiento y energia',
   dietaryStyle: 'Ninguna', religiousDiet: 'Ninguna',
   allergies: [], dislikes: [], learnedPreferences: [],
+  preferredSupermarket: '',
 };
 
-// Comprueba si el perfil tiene los datos mínimos para funcionar bien
 export function isProfileComplete(profile) {
   return Boolean(profile.weight && profile.height && profile.age && profile.goals);
 }
@@ -49,7 +48,7 @@ export function AppStateProvider({ children }) {
   const [favoriteRecipes, setFavoriteRecipes] = useState([]);
   const [interestedRecipes, setInterestedRecipes] = useState([]);
   const [savedRecipes, setSavedRecipes] = useState([]);
-  const [generatedRecipes, setGeneratedRecipes] = useState([]); // historial IA
+  const [generatedRecipes, setGeneratedRecipes] = useState([]);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [firestoreReady, setFirestoreReady] = useState(false);
 
@@ -78,7 +77,6 @@ export function AppStateProvider({ children }) {
         if (data.plan) setPlan(data.plan);
         if (data.savedMeals) setSavedMeals(data.savedMeals);
       } else {
-        // Usuario nuevo: migrar localStorage
         const lp = readStoredJson('nutrichef_profile', null);
         if (lp) setProfile({ ...DEFAULT_PROFILE, ...lp });
         const lf = readStoredJson('nutrichef_favs', []);
@@ -89,7 +87,6 @@ export function AppStateProvider({ children }) {
         if (lsr.length) setSavedRecipes(lsr);
       }
 
-      // Cargar historial de recetas generadas (subcolección separada)
       try {
         const q = query(
           collection(db, 'users', uid, 'generatedRecipes'),
@@ -97,14 +94,14 @@ export function AppStateProvider({ children }) {
           limit(50)
         );
         const snap2 = await getDocs(q);
-        setGeneratedRecipes(snap2.docs.map(d => ({ id: d.id, ...d.data() })));
+        setGeneratedRecipes(snap2.docs.map(d => ({ _firestoreId: d.id, ...d.data() })));
       } catch (_) { /* subcolección vacía */ }
 
       setFirestoreReady(true);
     });
   }, [uid, isLocalMode]);
 
-  // ── Sync Firestore ───────────────────────────────────────────────────────────
+  // ── Sync Firestore ────────────────────────────────────────────────────────────
   const syncReady = firestoreReady && !isLocalMode;
   useFirestoreSync(uid, 'profile', profile, syncReady);
   useFirestoreSync(uid, 'favoriteRecipes', favoriteRecipes, syncReady);
@@ -113,36 +110,91 @@ export function AppStateProvider({ children }) {
   useFirestoreSync(uid, 'plan', plan, syncReady);
   useFirestoreSync(uid, 'savedMeals', savedMeals, syncReady);
 
-  // ── Sync localStorage (modo local) ──────────────────────────────────────────
+  // ── Sync localStorage ─────────────────────────────────────────────────────────
   useEffect(() => { if (isLocalMode && firestoreReady) writeStoredJson('nutrichef_profile', profile); }, [profile, isLocalMode, firestoreReady]);
   useEffect(() => { if (isLocalMode && firestoreReady) writeStoredJson('nutrichef_favs', favoriteRecipes); }, [favoriteRecipes, isLocalMode, firestoreReady]);
   useEffect(() => { if (isLocalMode && firestoreReady) writeStoredJson('nutrichef_interested', interestedRecipes); }, [interestedRecipes, isLocalMode, firestoreReady]);
   useEffect(() => { if (isLocalMode && firestoreReady) writeStoredJson('nutrichef_saved_recipes', savedRecipes); }, [savedRecipes, isLocalMode, firestoreReady]);
   useEffect(() => { if (isLocalMode && firestoreReady) writeStoredJson('nutrichef_generated', generatedRecipes.slice(0, 50)); }, [generatedRecipes, isLocalMode, firestoreReady]);
 
-  // ── saveGeneratedRecipe: guarda automáticamente cada receta IA ───────────────
+  // ── saveGeneratedRecipe ───────────────────────────────────────────────────────
+  // Guarda una receta nueva. Devuelve el firestoreId para poder actualizarla luego.
   const saveGeneratedRecipe = useCallback(async (recipe) => {
-    if (!recipe?.title) return;
+    if (!recipe?.title) return null;
 
-    const entry = {
-      ...recipe,
-      generatedAt: new Date().toISOString(),
-    };
-
-    // Evitar duplicados por título
-    setGeneratedRecipes(prev => {
-      if (prev.some(r => r.title === recipe.title)) return prev;
-      return [entry, ...prev];
-    });
+    const entry = { ...recipe, generatedAt: new Date().toISOString() };
+    let firestoreId = null;
 
     if (uid && !isLocalMode) {
       try {
-        await addDoc(collection(db, 'users', uid, 'generatedRecipes'), entry);
+        const ref = await addDoc(collection(db, 'users', uid, 'generatedRecipes'), entry);
+        firestoreId = ref.id;
       } catch (err) {
         console.error('Error guardando receta generada:', err);
       }
     }
+
+    const entryWithId = { ...entry, _firestoreId: firestoreId };
+    setGeneratedRecipes(prev => {
+      // Si ya existe por título, no duplicar
+      if (prev.some(r => r.title === recipe.title && !recipe._refinedFrom)) return prev;
+      return [entryWithId, ...prev];
+    });
+
+    return firestoreId;
   }, [uid, isLocalMode]);
+
+  // ── refineGeneratedRecipe ─────────────────────────────────────────────────────
+  // Actualiza una receta existente en Firestore (no crea un duplicado).
+  // refinedRecipe debe tener _firestoreId si viene del historial.
+  const refineGeneratedRecipe = useCallback(async (originalFirestoreId, refinedRecipe) => {
+    if (!refinedRecipe?.title) return;
+
+    const entry = {
+      ...refinedRecipe,
+      refinedAt: new Date().toISOString(),
+      // Historial de refinamientos para auditoría
+      _refinements: [
+        ...(refinedRecipe._refinements || []),
+        {
+          instruction: refinedRecipe._refinement,
+          at: new Date().toISOString(),
+        }
+      ],
+    };
+
+    // Actualizar en el array local
+    setGeneratedRecipes(prev =>
+      prev.map(r =>
+        r._firestoreId === originalFirestoreId ? { ...r, ...entry } : r
+      )
+    );
+
+    // Actualizar en Firestore si existe el documento
+    if (uid && !isLocalMode && originalFirestoreId) {
+      try {
+        await updateDoc(
+          doc(db, 'users', uid, 'generatedRecipes', originalFirestoreId),
+          entry
+        );
+      } catch (err) {
+        console.error('Error actualizando receta refinada:', err);
+        // Si falla el update, guardar como nuevo documento
+        await saveGeneratedRecipe(entry);
+      }
+    }
+  }, [uid, isLocalMode, saveGeneratedRecipe]);
+
+  // ── addDislike ────────────────────────────────────────────────────────────────
+  // Agrega un ingrediente a dislikes del perfil y lo sincroniza automáticamente.
+  const addDislike = useCallback((ingredient) => {
+    if (!ingredient) return;
+    const clean = ingredient.trim().toLowerCase();
+    setProfile(prev => {
+      if (prev.dislikes.includes(clean)) return prev;
+      return { ...prev, dislikes: [...prev.dislikes, clean] };
+    });
+  }, []);
 
   const value = useMemo(() => ({
     plan, setPlan,
@@ -152,9 +204,16 @@ export function AppStateProvider({ children }) {
     savedRecipes, setSavedRecipes,
     generatedRecipes,
     saveGeneratedRecipe,
+    refineGeneratedRecipe,
+    addDislike,
     profile, setProfile,
     firestoreReady,
-  }), [plan, savedMeals, favoriteRecipes, interestedRecipes, savedRecipes, generatedRecipes, saveGeneratedRecipe, profile, firestoreReady]);
+  }), [
+    plan, savedMeals, favoriteRecipes, interestedRecipes,
+    savedRecipes, generatedRecipes,
+    saveGeneratedRecipe, refineGeneratedRecipe, addDislike,
+    profile, firestoreReady,
+  ]);
 
   return (
     <AppStateContext.Provider value={value}>
