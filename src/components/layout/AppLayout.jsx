@@ -1,22 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bookmark, Calendar, ChefHat, Compass, LogOut, PlusCircle, Settings, Utensils, User } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Bookmark, Calendar, ChefHat, Compass, LogOut, Settings, Sparkles, Utensils, User } from 'lucide-react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../routes/paths.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import TipsWidget from '../TipsWidget.jsx';
 
-const NAV_ITEMS = [
+const DESKTOP_NAV_ITEMS = [
   { to: ROUTES.create, label: 'Crear', icon: Utensils },
   { to: ROUTES.explore, label: 'Explorar', icon: Compass },
-  { to: '/add-recipe', label: 'Agregar', icon: PlusCircle },
   { to: ROUTES.saved, label: 'Guardados', icon: Bookmark },
   { to: ROUTES.plan, label: 'Plan', icon: Calendar },
 ];
 
-// En mobile, Perfil y Configuración van en el bottom nav
-const MOBILE_EXTRA = [
+const MOBILE_NAV_ITEMS = [
+  { to: ROUTES.create, label: 'Generar', icon: Utensils },
+  { to: ROUTES.explore, label: 'Explorar', icon: Compass },
+  { to: ROUTES.plan, label: 'Plan', icon: Calendar },
+  { to: ROUTES.saved, label: 'Guardados', icon: Bookmark },
   { to: ROUTES.profile, label: 'Perfil', icon: User },
-  { to: ROUTES.settings, label: 'Config', icon: Settings },
 ];
 
 function desktopNavClass({ isActive }) {
@@ -28,8 +29,10 @@ function desktopNavClass({ isActive }) {
 }
 
 function mobileNavClass({ isActive }) {
-  return `flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 transition-all ${
-    isActive ? 'text-[--c-primary]' : 'text-slate-400 dark:text-slate-500'
+  return `flex flex-col items-center justify-center gap-1.5 min-h-[72px] px-1.5 rounded-2xl flex-1 transition-all ${
+    isActive
+      ? 'text-[--c-primary] bg-[--c-primary-light]'
+      : 'text-slate-400 dark:text-slate-500'
   }`;
 }
 
@@ -68,6 +71,7 @@ function AvatarMenu({ user, isLocalMode, onClose }) {
 
 export default function AppLayout() {
   const { user, isLocalMode } = useAuth();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -79,10 +83,8 @@ export default function AppLayout() {
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
 
-  const ALL_MOBILE_ITEMS = [...NAV_ITEMS, ...MOBILE_EXTRA];
-
   return (
-    <div className="min-h-screen bg-[--c-bg] dark:bg-gray-950 text-slate-800 dark:text-slate-100 font-sans pb-20 md:pb-12 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans pb-28 md:pb-12 transition-colors duration-200">
 
       {/* Header */}
       <header className="bg-white dark:bg-gray-900 shadow-sm sticky top-0 z-20 border-b border-slate-100 dark:border-gray-800">
@@ -96,7 +98,7 @@ export default function AppLayout() {
 
           {/* Nav desktop */}
           <nav className="hidden sm:flex gap-1 flex-1 justify-center">
-            {NAV_ITEMS.map(item => (
+            {DESKTOP_NAV_ITEMS.map(item => (
               <NavLink key={item.to} to={item.to} className={desktopNavClass}>
                 <item.icon size={17} />
                 <span className="hidden lg:inline">{item.label}</span>
@@ -126,25 +128,38 @@ export default function AppLayout() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8">
+      <main className="max-w-5xl mx-auto px-6 sm:px-5 lg:px-4 py-6 md:py-8">
         <Outlet />
       </main>
 
       {/* Tips widget */}
       <TipsWidget />
 
+      {location.pathname !== ROUTES.create && (
+        <NavLink
+          to={ROUTES.create}
+          className="sm:hidden fixed bottom-24 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-[0_18px_38px_rgba(15,23,42,0.18)] border border-white/30"
+          style={{ background: 'linear-gradient(135deg, var(--c-primary), var(--c-accent))' }}
+          aria-label="Generar receta"
+        >
+          <Sparkles size={24} />
+        </NavLink>
+      )}
+
       {/* Bottom nav mobile */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-slate-100 dark:border-gray-800 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-20 flex">
-        {ALL_MOBILE_ITEMS.map(item => (
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-t border-slate-100 dark:border-gray-800 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-20 px-2 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
+        <div className="flex items-stretch gap-1.5">
+        {MOBILE_NAV_ITEMS.map(item => (
           <NavLink key={item.to} to={item.to} className={mobileNavClass}>
             {({ isActive }) => (
               <>
-                <item.icon size={20} strokeWidth={isActive ? 2.5 : 1.8} style={isActive ? { color: 'var(--c-primary)' } : {}} />
-                <span className="text-[9px] font-semibold">{item.label}</span>
+                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} style={isActive ? { color: 'var(--c-primary)' } : {}} />
+                <span className="text-[10px] font-semibold leading-none">{item.label}</span>
               </>
             )}
           </NavLink>
         ))}
+        </div>
       </nav>
     </div>
   );

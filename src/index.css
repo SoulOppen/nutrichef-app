@@ -13,9 +13,33 @@
   --c-bg-dark: #1c0a00;
 }
 
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-bold tracking-tight;
+  }
+
+  button {
+    @apply rounded-xl;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    @apply rounded-xl focus:outline-none focus:ring-2 focus:border-transparent;
+    --tw-ring-color: var(--c-primary);
+  }
+}
+
 /* Dark mode base */
 .dark body {
-  background-color: #0f172a;
+  background-color: #020617;
   color: #f1f5f9;
 }
 

@@ -2,15 +2,42 @@ import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Apple, BookOpen, CheckCircle2, Dumbbell, HeartPulse, Moon, PiggyBank, RefreshCw, ShoppingBag, Star, Target, Trophy } from 'lucide-react';
 import { useAppState } from '../context/appState.js';
 import { calculateTDEE, getSupermarketsForCountry } from '../lib/gemini.js';
+import { mergeUniqueTerms } from '../lib/ingredientIntelligence.js';
 
 const SPORT_OPTIONS = ['Ninguno', 'Cardio', 'Fuerza/Powerlifting', 'Crossfit', 'HIIT', 'Deportes de equipo'];
 const DIETARY_STYLES = ['Ninguna', 'Vegetariana', 'Vegana', 'Pescatariana', 'Keto', 'Paleo'];
 const RELIGIOUS_DIETS = ['Ninguna', 'Halal', 'Kosher', 'Hindú (Sin carne de res)', 'Jainista'];
 const COMMON_ALLERGIES = ['Sin Gluten', 'Sin Lácteos', 'Alergia al Maní', 'Alergia a Mariscos', 'Sin Soya'];
 
+const DIETARY_META = {
+  Ninguna: { icon: '•', active: 'border-slate-300 bg-slate-100 text-slate-700' },
+  Vegetariana: { icon: '🥬', active: 'border-green-300 bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300' },
+  Vegana: { icon: '🌱', active: 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300' },
+  Pescatariana: { icon: '🐟', active: 'border-sky-300 bg-sky-50 text-sky-800 dark:bg-sky-900/20 dark:text-sky-300' },
+  Keto: { icon: '🥑', active: 'border-lime-300 bg-lime-50 text-lime-800 dark:bg-lime-900/20 dark:text-lime-300' },
+  Paleo: { icon: '🥩', active: 'border-orange-300 bg-orange-50 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300' },
+};
+
+const RELIGIOUS_META = {
+  Ninguna: { icon: '•', active: 'border-slate-300 bg-slate-100 text-slate-700' },
+  Halal: { icon: '☪', active: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-300' },
+  Kosher: { icon: '✡', active: 'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200 shadow-[0_0_0_1px_rgba(245,158,11,0.22)]' },
+  'Hindú (Sin carne de res)': { icon: '🕉', active: 'border-orange-300 bg-orange-50 text-orange-900 dark:bg-orange-900/20 dark:text-orange-300' },
+  Jainista: { icon: '◌', active: 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-900 dark:bg-fuchsia-900/20 dark:text-fuchsia-300' },
+};
+
+const ALLERGY_META = {
+  'Sin Gluten': { icon: 'GF' },
+  'Sin Lácteos': { icon: 'DF' },
+  'Alergia al Maní': { icon: 'PN' },
+  'Alergia a Mariscos': { icon: 'SF' },
+  'Sin Soya': { icon: 'SY' },
+};
+
 export default function ProfileView() {
   const { profile, setProfile } = useAppState();
   const [dislikeInput, setDislikeInput] = useState('');
+  const [otherAllergyInput, setOtherAllergyInput] = useState('');
 
   // Recalcular macros automáticamente cuando cambien los datos relevantes
   useEffect(() => {
@@ -37,12 +64,18 @@ export default function ProfileView() {
 
   const toggleAllergy = (a) => setProfile({ ...profile, allergies: profile.allergies.includes(a) ? profile.allergies.filter(x => x !== a) : [...profile.allergies, a] });
   const removeLearnedPref = (i) => { const p = [...profile.learnedPreferences]; p.splice(i, 1); setProfile({ ...profile, learnedPreferences: p }); };
+  const addCustomAllergies = () => {
+    const nextAllergies = mergeUniqueTerms(profile.allergies, otherAllergyInput);
+    if (nextAllergies.length === profile.allergies.length) return;
+    setProfile({ ...profile, allergies: nextAllergies });
+    setOtherAllergyInput('');
+  };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="w-full max-w-5xl mx-auto space-y-6">
 
       {/* Meta principal */}
-      <section className="p-6 rounded-2xl border" style={{ background: 'var(--c-primary-light)', borderColor: 'var(--c-primary-border)' }}>
+      <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-md">
         <h3 className="text-base font-black mb-4 flex items-center gap-2" style={{ color: 'var(--c-primary-text)' }}>
           <Target size={18} /> Tu Meta Principal
         </h3>
@@ -69,7 +102,7 @@ export default function ProfileView() {
       </section>
 
       {/* Biometría */}
-      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-100 dark:border-gray-800 shadow-sm">
+      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-md">
         <h3 className="text-base font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
           <Activity size={16} className="text-blue-500" /> Biometría y Macros
         </h3>
@@ -133,7 +166,7 @@ export default function ProfileView() {
       </section>
 
       {/* Deporte */}
-      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-100 dark:border-gray-800 shadow-sm">
+      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-md">
         <h3 className="text-base font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2">
           <Trophy size={16} className="text-amber-500" /> Deporte y Entrenamiento
         </h3>
@@ -165,7 +198,7 @@ export default function ProfileView() {
       </section>
 
       {/* Dieta */}
-      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-100 dark:border-gray-800 shadow-sm space-y-5">
+      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-md space-y-5">
         <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
           <Apple size={16} className="text-green-500" /> Dieta y Restricciones
         </h3>
@@ -173,14 +206,59 @@ export default function ProfileView() {
         <div className="grid md:grid-cols-2 gap-5">
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1"><Apple size={12} className="text-green-500" /> Estilo de Dieta</label>
-            <div className="flex flex-wrap gap-2">
-              {DIETARY_STYLES.map(d => <button key={d} onClick={() => setProfile({ ...profile, dietaryStyle: d })} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${profile.dietaryStyle === d ? 'bg-green-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'}`}>{d}</button>)}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {DIETARY_STYLES.map(d => {
+                const selected = profile.dietaryStyle === d;
+                const meta = DIETARY_META[d] || DIETARY_META.Ninguna;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setProfile({ ...profile, dietaryStyle: d })}
+                    className={`min-h-[72px] rounded-2xl border-2 px-3 py-3 text-left text-sm font-semibold transition-all ${
+                      selected
+                        ? meta.active
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="mb-2 flex items-center justify-between">
+                      <span className="text-base">{meta.icon}</span>
+                      {selected && <CheckCircle2 size={14} className="shrink-0" />}
+                    </span>
+                    <span className="block leading-tight">{d}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1"><BookOpen size={12} className="text-purple-500" /> Dieta Religiosa</label>
-            <div className="flex flex-wrap gap-2">
-              {RELIGIOUS_DIETS.map(d => <button key={d} onClick={() => setProfile({ ...profile, religiousDiet: d })} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${profile.religiousDiet === d ? 'bg-purple-600 text-white' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'}`}>{d}</button>)}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {RELIGIOUS_DIETS.map(d => {
+                const selected = profile.religiousDiet === d;
+                const meta = RELIGIOUS_META[d] || RELIGIOUS_META.Ninguna;
+                return (
+                  <button
+                    key={d}
+                    onClick={() => setProfile({ ...profile, religiousDiet: d })}
+                    className={`min-h-[72px] rounded-2xl border-2 px-3 py-3 text-left text-sm font-semibold transition-all ${
+                      selected
+                        ? meta.active
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="mb-2 flex items-center justify-between">
+                      <span className="text-base">{meta.icon}</span>
+                      {selected && <CheckCircle2 size={14} className="shrink-0" />}
+                    </span>
+                    <span className="block leading-tight">{d}</span>
+                    {selected && d === 'Kosher' && (
+                      <span className="mt-2 inline-flex rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:bg-black/10 dark:text-amber-200">
+                        Prioridad Absoluta
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -268,12 +346,51 @@ export default function ProfileView() {
 
         <div>
           <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 flex items-center gap-1"><AlertTriangle size={12} className="text-red-500" /> Alergias e Intolerancias</label>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {COMMON_ALLERGIES.map(a => (
-              <button key={a} onClick={() => toggleAllergy(a)} className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 transition-colors ${profile.allergies.includes(a) ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800' : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300 border border-transparent'}`}>
-                {profile.allergies.includes(a) && <CheckCircle2 size={11} />}{a}
+              <button
+                key={a}
+                onClick={() => toggleAllergy(a)}
+                className={`min-h-[72px] rounded-2xl border-2 px-3 py-3 text-left text-sm font-semibold transition-all ${
+                  profile.allergies.includes(a)
+                    ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300'
+                    : 'border-slate-200 bg-white text-slate-600 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-300'
+                }`}
+              >
+                <span className="mb-2 flex items-center justify-between">
+                  <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-red-700 dark:bg-black/10 dark:text-red-300">{ALLERGY_META[a]?.icon || 'AL'}</span>
+                  {profile.allergies.includes(a) && <CheckCircle2 size={14} className="shrink-0" />}
+                </span>
+                <span className="block leading-tight">{a}</span>
+                {profile.allergies.includes(a) && (
+                  <span className="mt-2 inline-flex rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-black text-red-700 dark:bg-black/10 dark:text-red-300">
+                    Bloqueo Activo
+                  </span>
+                )}
               </button>
             ))}
+          </div>
+          <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-900/20">
+            <label className="mb-2 block text-xs font-bold text-red-800 dark:text-red-300">Otras alergias o intolerancias</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={otherAllergyInput}
+                onChange={e => setOtherAllergyInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomAllergies();
+                  }
+                }}
+                placeholder="Ej: Sésamo, kiwi, mostaza"
+                className="flex-1 rounded-xl border border-red-200 bg-white p-2.5 text-sm outline-none dark:border-red-800 dark:bg-gray-900 dark:text-white"
+              />
+              <button onClick={addCustomAllergies} className="rounded-xl bg-red-600 px-4 text-sm font-bold text-white">
+                Añadir
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-red-700/80 dark:text-red-300/80">Se guardan dentro de tu lista de alergias y bloquean ingredientes automáticamente.</p>
           </div>
         </div>
 
@@ -306,14 +423,14 @@ export default function ProfileView() {
       </section>
 
       {/* ── Supermercados preferidos (multi-select) ─────────────────── */}
-      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-100 dark:border-gray-800 shadow-sm">
+      <section className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-slate-200 dark:border-gray-800 shadow-md">
         <h3 className="text-base font-black text-slate-800 dark:text-white mb-1 flex items-center gap-2">
           <ShoppingBag size={16} className="text-emerald-500" /> Supermercados preferidos
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
           La IA priorizará marcas disponibles en los que selecciones. Selección múltiple.
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {getSupermarketsForCountry(profile.country || 'Chile').map(s => {
             const selected = (profile.preferredSupermarkets || []).includes(s);
             return (
@@ -328,14 +445,15 @@ export default function ProfileView() {
                       : [...current, s],
                   });
                 }}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-xs font-semibold transition-all min-h-[44px] text-left ${
+                className={`flex min-h-[72px] items-start gap-2 rounded-2xl border-2 px-3 py-3 text-left text-sm font-semibold transition-all ${
                   selected
-                    ? 'border-[--c-primary] bg-[--c-primary-light] text-[--c-primary-text]'
+                    ? 'border-[--c-primary] bg-[--c-primary-light] text-[--c-primary-text] shadow-sm'
                     : 'border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 bg-white dark:bg-gray-800 hover:border-[--c-primary-border]'
                 }`}
               >
+                <ShoppingBag size={15} className="mt-0.5 shrink-0 text-emerald-500" />
                 <span className="flex-1 leading-tight">{s}</span>
-                {selected && <CheckCircle2 size={13} className="shrink-0" style={{ color: 'var(--c-primary)' }} />}
+                {selected && <CheckCircle2 size={14} className="shrink-0" style={{ color: 'var(--c-primary)' }} />}
               </button>
             );
           })}

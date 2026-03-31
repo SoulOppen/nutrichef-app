@@ -1,4 +1,7 @@
-import { buildBrandContext } from './brandDatabase.js';
+import { buildAbsoluteGuardrail, buildBrandContext } from './brandDatabase.js';
+import { normalizeRecipePayload } from './ingredientIntelligence.js';
+export { buildAbsoluteGuardrail } from './brandDatabase.js';
+export { normalizeRecipePayload } from './ingredientIntelligence.js';
 
 export const GEMINI_API_ENDPOINT = '/api/gemini';
 export const GEMINI_COOLDOWN_KEY = 'nutrichef_gemini_cooldown_until';
@@ -120,12 +123,14 @@ export function setRecipeCache(c) { setCache(GENERATOR_RECIPE_CACHE_KEY, c); }
 // ── Cache Keys ────────────────────────────────────────────────────────────────
 export function buildGeneratorRecipeCacheKey({ suggestion, ingredients, profile, timeLimit }) {
   return JSON.stringify({
-    v: 'recipe-budget-v1',
+    v: 'recipe-safety-v2',
     n: suggestion.name,
     i: ingredients.trim().toLowerCase(),
     g: profile.goals,
     d: profile.dietaryStyle,
     a: profile.allergies,
+    dl: profile.dislikes,
+    r: profile.religiousDiet,
     cal: profile.dailyCalories,
     t: timeLimit || 'none',
     p: profile.pesachMode || false,
@@ -136,11 +141,13 @@ export function buildGeneratorRecipeCacheKey({ suggestion, ingredients, profile,
 }
 export function buildGeneratorSuggestionsCacheKey({ ingredients, profile, dishType, difficulty, cuisine }) {
   return JSON.stringify({
-    v: 'suggestions-budget-v1',
+    v: 'suggestions-safety-v2',
     i: ingredients.trim().toLowerCase(),
     g: profile.goals,
     d: profile.dietaryStyle,
     a: profile.allergies,
+    dl: profile.dislikes,
+    r: profile.religiousDiet,
     dt: dishType || '',
     dif: difficulty || '',
     c: cuisine || '',
@@ -150,16 +157,28 @@ export function buildGeneratorSuggestionsCacheKey({ ingredients, profile, dishTy
   });
 }
 export function buildExploreCacheKey({ query, mode, profile }) {
-  return JSON.stringify({ q: query.trim().toLowerCase(), m: mode, g: profile.goals, d: profile.dietaryStyle });
+  return JSON.stringify({
+    v: 'explore-safety-v2',
+    q: query.trim().toLowerCase(),
+    m: mode,
+    g: profile.goals,
+    d: profile.dietaryStyle,
+    a: profile.allergies,
+    dl: profile.dislikes,
+    r: profile.religiousDiet,
+  });
 }
 export function buildMealPlanCacheKey({ planType, isTrainingDay, planPreferences, profile, savedMeals }) {
   return JSON.stringify({
-    v: 'mealplan-budget-v1',
+    v: 'mealplan-safety-v2',
     t: planType,
     tr: isTrainingDay,
     p: planPreferences,
     g: profile.goals,
     d: profile.dietaryStyle,
+    a: profile.allergies,
+    dl: profile.dislikes,
+    r: profile.religiousDiet,
     cal: profile.dailyCalories,
     bf: profile.budgetFriendly || false,
     country: profile.country || 'Chile',
@@ -180,9 +199,11 @@ export function buildShoppingCacheKey(plan, profile = {}) {
   ) ?? [];
 
   return JSON.stringify({
-    v: 'shopping-budget-v1',
+    v: 'shopping-safety-v2',
     meals: meals.sort((a, b) => `${a.day}-${a.meal}-${a.name}`.localeCompare(`${b.day}-${b.meal}-${b.name}`)),
     bf: profile.budgetFriendly || false,
+    a: profile.allergies || [],
+    dl: profile.dislikes || [],
     country: profile.country || 'Chile',
     supers: (profile.preferredSupermarkets || []).slice().sort(),
   });
@@ -259,15 +280,18 @@ export function buildShoppingCostInstruction(profile = {}) {
 Devuelve precios mínimos y máximos NUMÉRICOS por ingrediente, más total semanal y ahorro estimado si aplica.`;
 }
 
-// ── Schema JSON de receta (con marcas_sugeridas) ──────────────────────────────
-export const RECIPE_JSON_SCHEMA = `{"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","ingredients":[{"name":"...","amount":"...","substitute":"..."}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[{"name":"...","category":"kosher|halal|vegan|powerlifting|vegetariana","note":"..."}]}`;
+// ── Schema JSON de receta (con seguridad de ingredientes) ─────────────────────
+export const RECIPE_JSON_SCHEMA = `{"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","servings":"...","ingredients":[{"name":"...","amount":"...","substitute":"...","suggestedSubstitute":"...","isDislike":false,"allergyAlert":false}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[{"name":"...","category":"kosher|halal|vegan|powerlifting|vegetariana","note":"..."}]}`;
 
 // ── Builder de prompt de receta con marcas ───────────────────────────────────
 export function buildRecipePrompt({ name, description, ingredients, profileStr, profile }) {
   const brandCtx = buildBrandContext(profile);
   const needsBrands = brandCtx.length > 0;
+  const guardrail = buildAbsoluteGuardrail(profile);
   return `Receta completa para "${name}".${description ? ` Contexto: ${description}.` : ''}${ingredients ? ` Ingredientes: ${ingredients}.` : ''}
-Perfil: ${profileStr}.${brandCtx}
+Perfil: ${profileStr}.
+${guardrail}${brandCtx}
+Marca cada ingrediente conflictivo con "isDislike" o "allergyAlert" y añade "suggestedSubstitute" inmediato si aplica.
 ${needsBrands ? 'Incluye marcas relevantes en "marcas_sugeridas" según la dieta del usuario.' : 'Devuelve "marcas_sugeridas" como array vacío.'}
 Devuelve SOLO este JSON:
 ${RECIPE_JSON_SCHEMA}`;
@@ -320,7 +344,7 @@ export async function callGeminiAPI(promptText, cacheKeyOrEntryKey = null, store
     const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textResult) throw new Error('La IA no devolvio texto');
     let parsed;
-    try { parsed = JSON.parse(extractJSON(textResult)); }
+    try { parsed = normalizeRecipePayload(JSON.parse(extractJSON(textResult))); }
     catch { console.error('Respuesta cruda:', textResult); throw new Error('JSON malformado - intenta de nuevo'); }
     if (useNewMode && entryKey) setCacheEntry(storeCacheKey, entryKey, parsed);
     else if (!useNewMode && entryKey) { const c = getRecipeCache(); c[entryKey] = parsed; setRecipeCache(c); }
@@ -536,23 +560,24 @@ export function detectSearchIntent(query) {
   return 'creative';
 }
 
-export function buildSearchPrompt({ query, mode, profileStr, localeStr, supermarketInstruction, brandInstruction, favoritesStr, pesachInstruction }) {
+export function buildSearchPrompt({ query, mode, profileStr, localeStr, supermarketInstruction, brandInstruction, favoritesStr, pesachInstruction, guardrailInstruction = '' }) {
   const favPart = favoritesStr ? ` Le gustan: ${favoritesStr}.` : '';
   const superPart = supermarketInstruction ? `\n${supermarketInstruction}` : '';
   const brandPart = brandInstruction ? `\n${brandInstruction}` : '';
   const pesachPart = pesachInstruction ? `\n${pesachInstruction}` : '';
+  const guardrailPart = guardrailInstruction ? `\n${guardrailInstruction}` : '';
 
   if (mode === 'literal') {
     return `${localeStr}
 El usuario busca EXACTAMENTE: "${query}".
-Perfil: ${profileStr}.${favPart}${superPart}${brandPart}${pesachPart}
+Perfil: ${profileStr}.${favPart}${guardrailPart}${superPart}${brandPart}${pesachPart}
 MODO LITERAL: Devuelve SOLO la receta exacta pedida. NO añadas acompañamientos ni menús completos.
 Devuelve SOLO este JSON con 1 resultado:
 {"suggestions":[{"id":1,"name":"[nombre exacto]","type":"[método]","description":"Receta exacta sin variaciones"}]}`;
   }
 
   return `${localeStr}
-El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${superPart}${brandPart}${pesachPart}
+El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${guardrailPart}${superPart}${brandPart}${pesachPart}
 Devuelve SOLO este JSON:
 {"suggestions":[{"id":1,"name":"...","type":"...","description":"..."},{"id":2,"name":"...","type":"...","description":"..."},{"id":3,"name":"...","type":"...","description":"..."}]}`;
 }
@@ -626,7 +651,7 @@ export async function refineRecipe(recipe, instruction) {
   "cookTime": "XX min",
   "cuisine": "Tipo de cocina",
   "servings": "X porciones",
-  "ingredients": [{ "name": "ingrediente", "amount": "cantidad", "substitute": "sustituto opcional" }],
+  "ingredients": [{ "name": "ingrediente", "amount": "cantidad", "substitute": "sustituto opcional", "suggestedSubstitute": "sustituto recomendado", "isDislike": false, "allergyAlert": false }],
   "steps": ["Paso 1...", "Paso 2..."],
   "macros": { "calories": "aprox kcal", "protein": "Xg", "carbs": "Xg", "fat": "Xg", "fiber": "Xg" },
   "tips": "Consejo de cocina",
@@ -636,6 +661,7 @@ export async function refineRecipe(recipe, instruction) {
   const promptText = `Ajusta la siguiente receta según la instrucción del usuario.
 Mantén el mismo idioma de la receta original.
 Si el usuario pide quitar o reemplazar ingredientes, actualiza ingredientes, pasos, tiempos y macros para que sean coherentes.
+Si detectas ingredientes de la receta que coinciden con alergias o dislikes del usuario, márcalos y devuelve un sustituto inmediato.
 Devuelve SOLO un JSON válido con este esquema:
 ${refinementSchema}
 
@@ -656,7 +682,7 @@ ${instruction}`;
 
   let parsed;
   try {
-    parsed = JSON.parse(extractJSON(textResult));
+    parsed = normalizeRecipePayload(JSON.parse(extractJSON(textResult)));
   } catch {
     console.error('Respuesta cruda al refinar receta:', textResult);
     throw new Error('La IA devolvio un ajuste invalido. Intenta de nuevo.');

@@ -3,11 +3,13 @@ import { ChefHat, ChevronRight, Compass, RefreshCw, Search, Sparkles, Zap } from
 import RecipeCard from '../components/RecipeCard.jsx';
 import { useAppState } from '../context/appState.js';
 import {
+  buildAbsoluteGuardrail,
   callGeminiAPI, compactProfile,
   buildExploreCacheKey, buildGeneratorRecipeCacheKey,
   buildLocaleInstruction, buildLocalBrandInstruction, buildSupermarketInstruction,
   buildSearchPrompt, detectSearchIntent,
   EXPLORE_CACHE_KEY, GENERATOR_RECIPE_CACHE_KEY,
+  RECIPE_JSON_SCHEMA,
 } from '../lib/gemini.js';
 import { searchLocalRecipes, getFeaturedRecipes, POPULAR_RECIPES } from '../lib/localRecipes.js';
 
@@ -75,6 +77,7 @@ export default function ExploreView() {
       localeStr: buildLocaleInstruction(profile),
       supermarketInstruction: buildSupermarketInstruction(profile),
       brandInstruction: buildLocalBrandInstruction(profile),
+      guardrailInstruction: buildAbsoluteGuardrail(profile),
       favoritesStr: favoriteRecipes.length > 0 ? favoriteRecipes.map(r => r.title).join(', ') : '',
     });
 
@@ -96,6 +99,7 @@ export default function ExploreView() {
     const localeStr = buildLocaleInstruction(profile);
     const superStr = buildSupermarketInstruction(profile);
     const brandStr = buildLocalBrandInstruction(profile);
+    const guardrailStr = buildAbsoluteGuardrail(profile);
     // En modo literal, instrucción explícita de no añadir extras
     const literalNote = detectedMode === 'literal'
       ? '\nIMPORTANTE: Solo la receta exacta pedida. Sin acompañamientos ni extras no solicitados.'
@@ -103,9 +107,9 @@ export default function ExploreView() {
 
     const prompt = `${localeStr}
 Receta completa para "${sugg.name}". ${sugg.description}.
-Perfil: ${compactProfile(profile)}.${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}
+Perfil: ${compactProfile(profile)}.${guardrailStr ? `\n${guardrailStr}` : ''}${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}
 Devuelve SOLO este JSON:
-{"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","ingredients":[{"name":"...","amount":"...","substitute":"..."}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[]}`;
+${RECIPE_JSON_SCHEMA}`;
 
     try {
       const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY);
@@ -116,7 +120,7 @@ Devuelve SOLO este JSON:
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="w-full max-w-5xl mx-auto space-y-8">
 
       {/* Header con búsqueda unificada */}
       <div className="p-8 rounded-3xl shadow-md text-white text-center" style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}>
@@ -155,7 +159,7 @@ Devuelve SOLO este JSON:
 
       {/* Sin resultados locales — escape a IA */}
       {noLocalResults && !loading && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-800 p-8 text-center space-y-4 animate-in fade-in">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-dashed border-indigo-200 dark:border-indigo-800 p-8 text-center space-y-4 animate-in fade-in shadow-md">
           <p className="text-slate-600 dark:text-slate-300 font-semibold">
             No encontramos "<span className="text-indigo-600 dark:text-indigo-400">{query}</span>" en el banco local.
           </p>
@@ -214,7 +218,7 @@ Devuelve SOLO este JSON:
 
           <div className="grid md:grid-cols-3 gap-4">
             {suggestions.map(sugg => (
-              <div key={sugg.id} className="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col hover:shadow-md transition-shadow">
+              <div key={sugg.id} className="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-md border border-slate-200 dark:border-gray-700 flex flex-col hover:shadow-lg transition-shadow">
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-0.5 rounded-full">
                     {sugg.type}
@@ -267,7 +271,7 @@ Devuelve SOLO este JSON:
               <div
                 key={sugg.id}
                 onClick={() => generateFromSuggestion(sugg)}
-                className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-slate-100 dark:border-gray-700 cursor-pointer hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-md transition-all group"
+                className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-slate-200 dark:border-gray-700 cursor-pointer hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-lg transition-all group"
               >
                 <div className="flex items-start justify-between mb-1">
                   <span className="text-[10px] font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded-full">{sugg.type}</span>

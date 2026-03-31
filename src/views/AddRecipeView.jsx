@@ -3,6 +3,7 @@ import { Camera, CheckCircle2, ChevronRight, Globe, RefreshCw, Type, X } from 'l
 import { useAppState } from '../context/appState.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
+import { buildAbsoluteGuardrail, compactProfile, normalizeRecipePayload } from '../lib/gemini.js';
 
 
 // Ícono SVG de Instagram (sin dependencias externas)
@@ -20,24 +21,32 @@ const MODES = [
   { id: 'text', label: 'Texto libre', icon: Type, description: 'Pega cualquier receta escrita' },
   { id: 'url', label: 'URL web', icon: Globe, description: 'Link de cualquier receta online' },
   { id: 'instagram', label: 'Instagram', description: 'Descripción del post o caption', icon: InstagramIcon },
-  { id: 'photo', label: 'Foto', icon: Camera, description: 'Escanea una receta con la cámara' },
+  { id: 'photo', label: 'Foto', icon: Camera, description: 'Escanea una receta o producto' },
 ];
 
-function buildPrompt(mode, input) {
-  const schema = `{
-  "title": "Nombre del plato",
-  "description": "Descripción breve apetitosa",
+const SCAN_SCHEMA = `{
+  "scanType": "recipe|product",
+  "safetyAlert": { "headline": "¡CUIDADO! Contiene [alérgeno]", "detectedAllergens": ["..."], "detectedDislikes": ["..."] },
+  "title": "Nombre del plato o producto",
+  "description": "Descripción breve",
   "prepTime": "XX min",
   "cookTime": "XX min",
   "cuisine": "Tipo de cocina",
   "servings": "X porciones",
-  "ingredients": [{ "name": "ingrediente", "amount": "cantidad", "substitute": "sustituto opcional" }],
+  "ingredients": [{ "name": "ingrediente", "amount": "cantidad", "substitute": "sustituto opcional", "suggestedSubstitute": "sustituto inmediato", "isDislike": false, "allergyAlert": false }],
   "steps": ["Paso 1...", "Paso 2..."],
   "macros": { "calories": "aprox kcal", "protein": "Xg", "carbs": "Xg", "fat": "Xg", "fiber": "Xg" },
   "tips": "Consejo de cocina"
 }`;
 
-  const instructions = `Extrae y estructura la receta del siguiente contenido. Calcula los macros nutricionales aproximados basándote en los ingredientes y cantidades. Devuelve ÚNICAMENTE el JSON válido con este esquema, sin texto adicional:\n${schema}\n\nCONTENIDO:\n`;
+function buildPrompt(mode, input, profile) {
+  const profileStr = compactProfile(profile);
+  const guardrail = buildAbsoluteGuardrail(profile);
+  const instructions = `Extrae y estructura la receta del siguiente contenido. Calcula los macros nutricionales aproximados basándote en los ingredientes y cantidades.
+Perfil del usuario: ${profileStr}.
+${guardrail}
+CONSIDERA ESTO UNA ORDEN: si aparece un ingrediente incluido en alergias o dislikes del usuario, sustitúyelo automáticamente por una alternativa segura y marca el ingrediente con "isDislike", "allergyAlert" y "suggestedSubstitute".
+Devuelve ÚNICAMENTE el JSON válido con este esquema, sin texto adicional:\n${SCAN_SCHEMA}\n\nCONTENIDO:\n`;
 
   if (mode === 'text') return instructions + input;
   if (mode === 'url') return instructions + `URL de la receta: ${input}\nExtrae la receta de esta URL y estructúrala.`;
@@ -46,7 +55,7 @@ function buildPrompt(mode, input) {
 }
 
 export default function AddRecipeView() {
-  const { savedRecipes, setSavedRecipes } = useAppState();
+  const { savedRecipes, setSavedRecipes, profile } = useAppState();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -67,7 +76,7 @@ export default function AddRecipeView() {
     setPreview(null);
 
     try {
-      const promptText = buildPrompt(mode, input);
+      const promptText = buildPrompt(mode, input, profile);
       const payload = {
         contents: [{ role: 'user', parts: [{ text: promptText }] }],
         generationConfig: { temperature: 0.3 }
@@ -82,7 +91,7 @@ export default function AddRecipeView() {
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('La IA no pudo extraer la receta. Intenta con más detalle.');
-      setPreview(JSON.parse(match[0]));
+      setPreview(normalizeRecipePayload(JSON.parse(match[0])));
     } catch (err) {
       console.error(err);
       setError(err.message || 'Error al procesar la receta.');
@@ -103,8 +112,13 @@ export default function AddRecipeView() {
         reader.readAsDataURL(file);
       });
 
-      const schema = `{ "title": "...", "description": "...", "prepTime": "...", "cookTime": "...", "cuisine": "...", "servings": "...", "ingredients": [{ "name": "...", "amount": "...", "substitute": "..." }], "steps": ["..."], "macros": { "calories": "...", "protein": "...", "carbs": "...", "fat": "...", "fiber": "..." }, "tips": "..." }`;
-      const promptText = `Mira esta imagen de una receta. Extrae toda la información visible: nombre, ingredientes con cantidades, pasos de preparación. Calcula los macros nutricionales aproximados. Devuelve ÚNICAMENTE un JSON válido con este esquema: ${schema}`;
+      const promptText = `Analiza esta imagen y determina si es una receta o un producto/envasado.
+Perfil del usuario: ${compactProfile(profile)}.
+${buildAbsoluteGuardrail(profile)}
+CONSIDERA ESTO UNA ORDEN: si detectas alérgenos o ingredientes en dislikes del usuario, responde con "scanType":"product" o marca el ingrediente con alerta y sustituto seguro.
+Si es un producto o etiqueta, responde "scanType":"product" y usa "safetyAlert.headline" con formato grande como "¡CUIDADO! Contiene [alérgeno]".
+Si es una receta, extrae nombre, ingredientes con cantidades, pasos y macros aproximados.
+Devuelve ÚNICAMENTE un JSON válido con este esquema: ${SCAN_SCHEMA}`;
 
       const payload = {
         contents: [{
@@ -125,7 +139,7 @@ export default function AddRecipeView() {
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('No se pudo extraer la receta de la foto.');
-      setPreview(JSON.parse(match[0]));
+      setPreview(normalizeRecipePayload(JSON.parse(match[0])));
     } catch (err) {
       console.error(err);
       setError(err.message || 'Error al procesar la foto.');
@@ -135,7 +149,7 @@ export default function AddRecipeView() {
   };
 
   const saveRecipe = () => {
-    if (!preview) return;
+    if (!preview || preview.scanType === 'product') return;
     const alreadyExists = savedRecipes.some(r => r.title === preview.title);
     if (!alreadyExists) {
       setSavedRecipes([...savedRecipes, { ...preview, addedAt: new Date().toISOString() }]);
@@ -192,7 +206,7 @@ export default function AddRecipeView() {
             >
               <Camera size={40} className="mx-auto mb-3 text-slate-400" />
               <p className="font-semibold text-slate-600 dark:text-slate-300">Toca para subir una foto</p>
-              <p className="text-xs text-slate-400 mt-1">Foto de receta escrita, libro de cocina, pantalla, etc.</p>
+              <p className="text-xs text-slate-400 mt-1">Puede ser receta escrita, empaque o etiqueta de ingredientes.</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -260,6 +274,36 @@ export default function AddRecipeView() {
       {/* Preview de la receta extraída */}
       {preview && !saved && (
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-slate-200 dark:border-gray-700 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+          {preview.scanType === 'product' ? (
+            <div className="p-5 space-y-4">
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-800 dark:bg-red-900/20">
+                <h3 className="text-xl font-black text-red-700 dark:text-red-300">
+                  {preview.safetyAlert?.headline || '¡CUIDADO! Revisa este producto'}
+                </h3>
+                <p className="mt-2 text-sm text-red-700/80 dark:text-red-300/80">
+                  {preview.description || 'Detectamos ingredientes que podrían entrar en conflicto con tus alergias o preferencias.'}
+                </p>
+                {(preview.detectedAllergens?.length || preview.safetyAlert?.detectedAllergens?.length) > 0 && (
+                  <p className="mt-3 text-sm font-semibold text-red-800 dark:text-red-200">
+                    Alérgenos: {(preview.detectedAllergens || preview.safetyAlert?.detectedAllergens || []).join(', ')}
+                  </p>
+                )}
+                {(preview.detectedDislikes?.length || preview.safetyAlert?.detectedDislikes?.length) > 0 && (
+                  <p className="mt-2 text-sm font-semibold text-red-800 dark:text-red-200">
+                    Preferencias detectadas: {(preview.detectedDislikes || preview.safetyAlert?.detectedDislikes || []).join(', ')}
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={() => { setPreview(null); setInput(''); }}
+                className="w-full py-3 rounded-xl border-2 border-slate-200 dark:border-gray-600 text-slate-600 dark:text-slate-300 font-bold text-sm hover:border-slate-400 transition-colors"
+              >
+                Escanear otra foto
+              </button>
+            </div>
+          ) : (
+            <>
           {/* Mini header */}
           <div className="p-5 text-white" style={{ background: `linear-gradient(135deg, var(--c-primary), var(--c-accent))` }}>
             <div className="flex justify-between items-start">
@@ -341,6 +385,8 @@ export default function AddRecipeView() {
               </button>
             </div>
           </div>
+            </>
+          )}
         </div>
       )}
 

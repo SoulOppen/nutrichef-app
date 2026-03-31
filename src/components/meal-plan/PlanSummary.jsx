@@ -1,40 +1,36 @@
-import { Calendar } from 'lucide-react';
-
-export default function PlanSummary({ plan, selectedDayIdx, onSelectDay }) {
+export default function PlanSummary({ plan }) {
   if (!plan) {
     return null;
   }
 
   return (
-    <>
-      <div className="bg-green-50 p-6 rounded-2xl border border-green-100 text-green-900 shadow-sm">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-lg">Resumen del Plan</h3>
-          <div className="flex flex-wrap gap-2 text-sm font-bold justify-end">
-            <span className="bg-white px-3 py-1 rounded-full shadow-sm">🔥 ~{plan.totalCalories}/dia</span>
-            <span className="bg-white px-3 py-1 rounded-full shadow-sm text-blue-600">🥩 ~{plan.totalProtein} Prot</span>
-            {plan.totalFiber && <span className="bg-white px-3 py-1 rounded-full shadow-sm text-green-600">🌿 ~{plan.totalFiber} Fibra</span>}
-          </div>
+    <div className="rounded-3xl border border-emerald-100 bg-[linear-gradient(135deg,rgba(236,253,245,1),rgba(255,255,255,1))] p-6 text-emerald-950 shadow-md">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700/70">Resumen</p>
+          <h3 className="mt-1 text-xl font-bold tracking-tight text-emerald-950">Tu semana ya tiene una guía clara</h3>
+          <p className="mt-2 text-sm leading-relaxed text-emerald-900/80">{plan.summary}</p>
         </div>
-        <p className="opacity-90 text-sm">{plan.summary}</p>
-      </div>
 
-      {plan.days && plan.days.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-2 no-scrollbar snap-x">
-          {plan.days.map((day, idx) => (
-            <button
-              key={`day-${idx}`}
-              onClick={() => onSelectDay(idx)}
-              className={`snap-start shrink-0 px-5 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${
-                selectedDayIdx === idx ? 'bg-orange-600 text-white shadow-md' : 'bg-white text-slate-600 border border-slate-200 hover:bg-orange-50'
-              }`}
-            >
-              <Calendar size={18} />
-              {day.dayName}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2 lg:max-w-[280px] lg:justify-end">
+          <span className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-sm font-black text-emerald-900 shadow-sm">
+            🔥 ~{plan.totalCalories}/día
+          </span>
+          <span className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-sm font-black text-blue-600 shadow-sm">
+            🥩 ~{plan.totalProtein} Prot
+          </span>
+          {plan.totalFiber && (
+            <span className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-sm font-black text-green-600 shadow-sm">
+              🌿 ~{plan.totalFiber} Fibra
+            </span>
+          )}
+          {plan.days?.length ? (
+            <span className="rounded-2xl border border-white/70 bg-white px-3 py-2 text-sm font-black text-slate-600 shadow-sm">
+              📅 {plan.days.length} días organizados
+            </span>
+          ) : null}
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }

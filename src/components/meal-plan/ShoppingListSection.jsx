@@ -1,6 +1,22 @@
-import { Check, PiggyBank, RefreshCw, ShoppingCart } from 'lucide-react';
-import { useState } from 'react';
+import { PiggyBank, RefreshCw, ShoppingCart } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatCurrencyByCountry } from '../../lib/gemini.js';
+import { applyShoppingListSafetySwaps } from '../../lib/ingredientIntelligence.js';
+
+const AISLE_ORDER = [
+  'Frutas y Verduras',
+  'Proteínas',
+  'Lácteos y Refrigerados',
+  'Almacén',
+  'Otros',
+];
+
+function normalizeText(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
 
 function buildPriceRange(item, country) {
   const min = Number(item?.estimatedPriceMin || 0);
@@ -20,53 +36,116 @@ function getAveragePrice(item) {
   return (min + max) / 2;
 }
 
-function ShoppingItem({ item, country }) {
-  const [checked, setChecked] = useState(false);
-  const name = typeof item === 'string' ? item : (item.name || item.producto || item.item || 'Ingrediente');
-  const amount = typeof item !== 'string' ? (item.amount || item.cantidad || '') : '';
+function getItemName(item) {
+  return typeof item === 'string' ? item : (item.name || item.producto || item.item || 'Ingrediente');
+}
+
+function getItemAmount(item) {
+  return typeof item === 'string' ? '' : (item.amount || item.cantidad || '');
+}
+
+function getItemSourceCategory(category = '') {
+  return normalizeText(category);
+}
+
+function getAisleName(item, sourceCategory = '') {
+  const haystack = `${getItemSourceCategory(sourceCategory)} ${normalizeText(getItemName(item))}`;
+
+  if (/(fruta|verdura|vegetal|produce|ensalada|hierba|hortaliza|tomate|cebolla|lechuga|palta|aguacate|manzana|platano|banana|papa|zanahoria|pepino|espinaca)/.test(haystack)) {
+    return 'Frutas y Verduras';
+  }
+
+  if (/(proteina|protein|carne|pollo|pavo|res|vacuno|cerdo|huevo|pescado|salmon|salmon|atun|atun|jurel|tofu|legumbre|lenteja|garbanzo|poroto|frijol)/.test(haystack)) {
+    return 'Proteínas';
+  }
+
+  if (/(lacteo|refrigerad|frio|frío|queso|leche|mantequilla|crema|yogur|yogurt|kefir|hummus)/.test(haystack)) {
+    return 'Lácteos y Refrigerados';
+  }
+
+  if (/(almacen|almac[eé]n|despensa|basico|b[aá]sico|grano|cereal|arroz|pasta|avena|quinoa|harina|pan|aceite|condimento|salsa|lata|conserva|snack|frutos secos)/.test(haystack)) {
+    return 'Almacén';
+  }
+
+  return 'Otros';
+}
+
+function regroupShoppingList(shoppingList) {
+  if (!shoppingList?.categories) return shoppingList;
+
+  const grouped = new Map(AISLE_ORDER.map(name => [name, []]));
+
+  shoppingList.categories.forEach(category => {
+    (category.items || []).forEach(item => {
+      const aisle = getAisleName(item, category.name);
+      grouped.get(aisle)?.push(item);
+    });
+  });
+
+  return {
+    ...shoppingList,
+    categories: AISLE_ORDER
+      .map(name => ({ name, items: grouped.get(name) || [] }))
+      .filter(category => category.items.length > 0),
+  };
+}
+
+function getItemKey(item, categoryName, index) {
+  return `${categoryName}-${getItemName(item)}-${getItemAmount(item)}-${item?.substituteFor || ''}-${index}`;
+}
+
+function ShoppingItem({ item, country, checked, onToggle, itemKey }) {
+  const name = getItemName(item);
+  const amount = getItemAmount(item);
   const priceLabel = typeof item === 'string' ? null : buildPriceRange(item, country);
+  const substituteFor = typeof item !== 'string' ? item.substituteFor : null;
 
   return (
-    <li
-      onClick={() => setChecked(c => !c)}
-      className={`rounded-xl cursor-pointer transition-all select-none ${
-        checked
-          ? 'bg-green-50 dark:bg-green-900/20 opacity-60'
-          : 'hover:bg-slate-100 dark:hover:bg-gray-700'
-      }`}
-    >
-      <div className="flex items-start gap-3 py-2.5 px-3">
-        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-          checked ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-gray-500'
-        }`}>
-          {checked && <Check size={11} className="text-white" strokeWidth={3} />}
+    <li>
+      <label
+        htmlFor={itemKey}
+        className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-3 py-3 transition-all ${
+          checked
+            ? 'border-slate-200 bg-slate-50'
+            : 'border-slate-200 bg-white hover:border-[--c-primary-border] hover:bg-slate-50'
+        }`}
+      >
+        <input
+          id={itemKey}
+          type="checkbox"
+          checked={checked}
+          onChange={() => onToggle(itemKey)}
+          className="mt-1 h-5 w-5 rounded border-slate-300 text-[--c-primary] focus:ring-2 focus:ring-[--c-primary]"
+        />
+
+        <div className="min-w-0 flex-1">
+          <span className={`block text-sm leading-snug ${checked ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+            {name}
+          </span>
+          {substituteFor && (
+            <span className="mt-1 inline-flex rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
+              Sustituye a {substituteFor}
+            </span>
+          )}
         </div>
 
-        <span className={`flex-1 text-sm leading-snug ${
-          checked
-            ? 'line-through text-slate-400 dark:text-slate-500'
-            : 'text-slate-700 dark:text-slate-200'
-        }`}>
-          {name}
-        </span>
-
-        <div className="shrink-0 min-w-[88px] flex flex-col items-end gap-1 text-right">
+        <div className="min-w-[96px] shrink-0 text-right">
           {amount && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border whitespace-nowrap ${
+            <span className={`inline-flex rounded-xl border px-2.5 py-1 text-xs font-bold ${
               checked
-                ? 'bg-slate-100 dark:bg-gray-700 text-slate-400 border-slate-200 dark:border-gray-600'
-                : 'bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-gray-600 shadow-sm'
+                ? 'border-slate-200 bg-slate-100 text-slate-400'
+                : 'border-slate-200 bg-slate-50 text-slate-600'
             }`}>
               {amount}
             </span>
           )}
           {priceLabel && (
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap">
+            <p className="mt-1 text-[11px] font-medium text-slate-400">
               {priceLabel}
-            </span>
+            </p>
           )}
         </div>
-      </div>
+      </label>
     </li>
   );
 }
@@ -77,18 +156,43 @@ export default function ShoppingListSection({
   onGenerateShoppingList,
   country = 'Chile',
   optimizeBudget = false,
+  profile = {},
 }) {
-  const totalItems = shoppingList?.categories?.reduce((acc, cat) => acc + (cat.items?.length || 0), 0) || 0;
-  const fallbackApproxTotal = shoppingList?.categories?.reduce((acc, cat) => (
+  const [checkedItems, setCheckedItems] = useState({});
+  const safeShoppingList = useMemo(
+    () => applyShoppingListSafetySwaps(shoppingList, profile),
+    [shoppingList, profile]
+  );
+  const groupedShoppingList = useMemo(
+    () => regroupShoppingList(safeShoppingList),
+    [safeShoppingList]
+  );
+
+  useEffect(() => {
+    setCheckedItems({});
+  }, [groupedShoppingList]);
+
+  const toggleCheckedItem = (itemKey) => {
+    setCheckedItems(current => ({ ...current, [itemKey]: !current[itemKey] }));
+  };
+
+  const totalItems = groupedShoppingList?.categories?.reduce((acc, cat) => acc + (cat.items?.length || 0), 0) || 0;
+  const checkedCount = groupedShoppingList?.categories?.reduce((acc, category) => (
+    acc + (category.items?.reduce((sum, item, index) => {
+      const itemKey = getItemKey(item, category.name, index);
+      return sum + (checkedItems[itemKey] ? 1 : 0);
+    }, 0) || 0)
+  ), 0) || 0;
+  const fallbackApproxTotal = groupedShoppingList?.categories?.reduce((acc, cat) => (
     acc + (cat.items?.reduce((sum, item) => sum + getAveragePrice(item), 0) || 0)
   ), 0) || 0;
-  const totalMin = Number(shoppingList?.estimatedTotalMin || 0);
-  const totalMax = Number(shoppingList?.estimatedTotalMax || 0);
+  const totalMin = Number(groupedShoppingList?.estimatedTotalMin || 0);
+  const totalMax = Number(groupedShoppingList?.estimatedTotalMax || 0);
   const totalApprox = totalMin || totalMax
     ? Math.round(((totalMin || totalMax) + (totalMax || totalMin)) / 2)
     : Math.round(fallbackApproxTotal);
-  const savingsMin = Number(shoppingList?.estimatedSavingsMin || 0);
-  const savingsMax = Number(shoppingList?.estimatedSavingsMax || 0);
+  const savingsMin = Number(groupedShoppingList?.estimatedSavingsMin || 0);
+  const savingsMax = Number(groupedShoppingList?.estimatedSavingsMax || 0);
   const savingsApprox = savingsMin || savingsMax
     ? Math.round(((savingsMin || savingsMax) + (savingsMax || savingsMin)) / 2)
     : 0;
@@ -97,12 +201,12 @@ export default function ShoppingListSection({
     : totalApprox > 0 ? formatCurrencyByCountry(totalApprox, country) : null;
 
   return (
-    <div className="mt-8 pt-8 border-t border-slate-200 dark:border-gray-700">
+    <div className="space-y-4">
       {!shoppingList && (
         <button
           onClick={() => onGenerateShoppingList()}
           disabled={loadingList}
-          className="w-full py-4 border-2 border-dashed border-slate-300 dark:border-gray-600 rounded-2xl text-slate-500 dark:text-slate-400 hover:text-[--c-primary] hover:border-[--c-primary-border] hover:bg-[--c-primary-light] font-bold transition-all flex justify-center items-center gap-2"
+          className="flex w-full items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-slate-300 bg-white py-4 font-bold text-slate-500 transition-all hover:border-[--c-primary-border] hover:bg-[--c-primary-light] hover:text-[--c-primary] disabled:opacity-70"
         >
           {loadingList
             ? <><RefreshCw className="animate-spin" size={20} /> Calculando cantidades...</>
@@ -111,57 +215,80 @@ export default function ShoppingListSection({
         </button>
       )}
 
-      {shoppingList?.categories && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-          <div className="px-5 py-4 border-b border-slate-100 dark:border-gray-800 space-y-4">
-            <div className="flex items-start justify-between gap-4">
+      {groupedShoppingList?.categories?.length > 0 && (
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <h3 className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-800">
                   <ShoppingCart size={18} style={{ color: 'var(--c-primary)' }} />
                   Lista del Súper
-                  <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 ml-1">
-                    ({totalItems} productos)
-                  </span>
                 </h3>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Toca para marcar y compara precios por ingrediente.</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Checklist real por pasillo para que compres con menos ruido visual.
+                </p>
               </div>
-              <p className="hidden sm:block text-xs text-slate-400 dark:text-slate-500 text-right">Precios estimados por ingrediente</p>
+
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {checkedCount}/{totalItems} listos
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  {groupedShoppingList.categories.length} pasillos
+                </span>
+              </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
-              <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-wider font-black text-emerald-700 dark:text-emerald-300">Costo semanal</p>
-                <p className="text-lg font-black text-emerald-900 dark:text-emerald-200">
+            <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto] xl:items-center">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700">Costo semanal</p>
+                <p className="text-lg font-black text-emerald-900">
                   Costo aprox. para esta semana: {totalApprox > 0 ? formatCurrencyByCountry(totalApprox, country) : '—'}
                 </p>
                 {totalRangeLabel && (
-                  <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-1">Rango estimado: {totalRangeLabel}</p>
+                  <p className="mt-1 text-xs text-emerald-700/80">Rango estimado: {totalRangeLabel}</p>
                 )}
               </div>
 
               {optimizeBudget && savingsApprox > 0 && (
-                <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 hidden lg:block">
-                  <p className="text-[11px] uppercase tracking-wider font-black text-amber-700 dark:text-amber-300">Ahorro Estimado</p>
-                  <p className="text-lg font-black text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                <div className="hidden rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 xl:block">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-amber-700">Ahorro Estimado</p>
+                  <p className="flex items-center gap-2 text-lg font-black text-amber-900">
                     <PiggyBank size={18} /> {formatCurrencyByCountry(savingsApprox, country)}
                   </p>
-                  <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-1">frente a una compra estándar</p>
+                  <p className="mt-1 text-xs text-amber-700/80">frente a una compra estándar</p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-gray-800">
-            {shoppingList.categories.map((cat, i) => (
-              <div key={`cat-${i}`} className="p-4">
-                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2 px-3">
-                  {cat.name}
-                </h4>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {groupedShoppingList.categories.map((category, categoryIndex) => (
+              <div key={`cat-${categoryIndex}`} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">
+                    {category.name}
+                  </h4>
+                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">
+                    {category.items?.length || 0}
+                  </span>
+                </div>
 
-                <ul className="space-y-0.5">
-                  {cat.items?.map((item, j) => (
-                    <ShoppingItem key={`item-${i}-${j}`} item={item} country={country} />
-                  ))}
+                <ul className="space-y-2.5">
+                  {category.items?.map((item, itemIndex) => {
+                    const itemKey = getItemKey(item, category.name, itemIndex);
+
+                    return (
+                      <ShoppingItem
+                        key={itemKey}
+                        item={item}
+                        country={country}
+                        checked={Boolean(checkedItems[itemKey])}
+                        onToggle={toggleCheckedItem}
+                        itemKey={itemKey}
+                      />
+                    );
+                  })}
                 </ul>
               </div>
             ))}

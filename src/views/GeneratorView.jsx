@@ -3,6 +3,7 @@ import { Apple, Camera, ChefHat, ChevronRight, Flame, PiggyBank, RefreshCw, Spar
 import RecipeCard from '../components/RecipeCard.jsx';
 import { useAppState } from '../context/appState.js';
 import {
+  buildAbsoluteGuardrail,
   buildBudgetOptimizationInstruction,
   buildGeneratorRecipeCacheKey,
   buildGeneratorSuggestionsCacheKey,
@@ -16,6 +17,7 @@ import {
   GENERATOR_SUGGESTIONS_CACHE_KEY,
   getCooldownMessage,
   getGeminiCooldownUntil,
+  RECIPE_JSON_SCHEMA,
   TIME_OPTIONS,
   readStoredJson,
   writeStoredJson,
@@ -101,6 +103,7 @@ export default function GeneratorView() {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
 
   const [error, setError] = useState(null);
+  const [scanAlert, setScanAlert] = useState(null);
   const [quotaNotice, setQuotaNotice] = useState(null);
   const [cacheNotice, setCacheNotice] = useState(null);
   const [cooldownUntil, setCooldownUntilState] = useState(() => getGeminiCooldownUntil());
@@ -129,9 +132,25 @@ export default function GeneratorView() {
       const base64Data = reader.result.split(',')[1];
       setScanning(true);
       try {
-        const prompt = 'Identifica todos los ingredientes de comida visibles en esta imagen. Devuelve ÚNICAMENTE una lista de los nombres de los ingredientes separados por comas, sin texto adicional.';
+        const prompt = `Analiza esta imagen.
+Perfil del usuario: ${compactProfile(profile)}.
+${buildAbsoluteGuardrail(profile)}
+Si es un producto o etiqueta y contiene un alérgeno o ingrediente conflictivo, responde SOLO este JSON:
+{"mode":"product","headline":"¡CUIDADO! Contiene [alérgeno]","ingredientsText":"","detected":["..."]}.
+Si es una imagen de ingredientes o comida segura, responde SOLO este JSON:
+{"mode":"ingredients","headline":"","ingredientsText":"ingrediente 1, ingrediente 2","detected":[]}.`;
         const resultText = await callGeminiVisionAPI(prompt, base64Data, file.type);
-        setIngredients(prev => prev ? `${prev}, ${resultText.trim()}` : resultText.trim());
+        const match = resultText.match(/\{[\s\S]*\}/);
+        const parsed = match ? JSON.parse(match[0]) : null;
+
+        if (parsed?.mode === 'product' && parsed.headline) {
+          setScanAlert(parsed.headline);
+          return;
+        }
+
+        setScanAlert(null);
+        const detectedText = parsed?.ingredientsText || resultText.trim();
+        setIngredients(prev => prev ? `${prev}, ${detectedText}` : detectedText);
       } catch (err) {
         setError('Error al escanear la imagen.');
       } finally {
@@ -175,6 +194,7 @@ export default function GeneratorView() {
     const localeStr = buildLocaleInstruction(profile);
     const superStr = buildSupermarketInstruction(profile);
     const brandStr = buildLocalBrandInstruction(profile);
+    const guardrailStr = buildAbsoluteGuardrail(profile);
     const timeStr = buildTimeConstraint(maxTime);
     const budgetStr = buildBudgetOptimizationInstruction(profile);
     const cuisineLabel = cuisine === 'Comida Local' ? `Cocina típica de ${profile.country || 'Chile'}` : cuisine;
@@ -183,6 +203,7 @@ export default function GeneratorView() {
 Eres un chef IA. Genera 3 opciones de ${dishType} estilo ${cuisineLabel} usando: ${ingredients}.
 Perfil: ${profileStr}.
 ${favoriteRecipes.length > 0 ? `Le gustan: ${favoriteRecipes.map(r => r.title).join(', ')}.` : ''}
+${guardrailStr}
 ${timeStr}
 ${superStr}
 ${brandStr}
@@ -223,6 +244,7 @@ Devuelve SOLO este JSON:
     const localeStr2 = buildLocaleInstruction(profile);
     const superStr2 = buildSupermarketInstruction(profile);
     const brandStr2 = buildLocalBrandInstruction(profile);
+    const guardrailStr2 = buildAbsoluteGuardrail(profile);
     const timeStr2 = buildTimeConstraint(maxTime);
     const budgetStr2 = buildBudgetOptimizationInstruction(profile);
     const cuisineLabel2 = cuisine === 'Comida Local' ? `Cocina típica de ${profile.country || 'Chile'}` : cuisine;
@@ -231,13 +253,14 @@ Devuelve SOLO este JSON:
 Receta completa de ${dishType} estilo ${cuisineLabel2}: "${sugg.name}".
 ${sugg.description}. Ingredientes disponibles: ${ingredients}.
 Perfil: ${profileStr2}.
+${guardrailStr2}
 ${timeStr2}
 ${superStr2}
 ${brandStr2}
 ${budgetStr2}
 ${complexity.promptInstructions}
 Devuelve SOLO este JSON:
-{"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","ingredients":[{"name":"...","amount":"...","substitute":"..."}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[]}`;
+${RECIPE_JSON_SCHEMA}`;
 
     try {
       const result = await callGeminiAPI(prompt, recipeCacheKey);
@@ -255,9 +278,9 @@ Devuelve SOLO este JSON:
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div className="lg:col-span-4 space-y-6">
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-800">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-gray-800">
           <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
             <Apple style={{ color: 'var(--c-primary)' }} size={20} />
             ¿Qué hay en tu cocina?
@@ -284,6 +307,11 @@ Devuelve SOLO este JSON:
                   {scanning ? 'Escaneando...' : '✨ Escanear Foto'}
                 </button>
               </div>
+              {scanAlert && (
+                <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                  {scanAlert}
+                </div>
+              )}
             </div>
 
             {/* Tipo y cocina */}
@@ -427,7 +455,7 @@ Devuelve SOLO este JSON:
       {/* Panel derecho */}
       <div className="lg:col-span-8">
         {loading && (
-          <div className="h-full min-h-[400px] flex flex-col items-center justify-center space-y-4 bg-white/50 dark:bg-gray-800/50 rounded-3xl border border-dashed border-slate-200 dark:border-gray-700">
+          <div className="h-full min-h-[400px] flex flex-col items-center justify-center space-y-4 bg-white dark:bg-gray-900 rounded-3xl border border-dashed border-slate-200 dark:border-gray-700 shadow-md">
             <RefreshCw className="animate-spin" size={48} style={{ color: 'var(--c-primary)' }} />
             <p className="font-medium animate-pulse text-slate-500 dark:text-slate-400">
               {complexityValue <= 1 ? 'Buscando algo rápido y sencillo...' : 'Pensando qué preparar con tus ingredientes...'}
@@ -436,7 +464,7 @@ Devuelve SOLO este JSON:
         )}
 
         {!loading && !suggestions && !selectedRecipe && (
-          <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-400 space-y-4 bg-white/50 dark:bg-gray-800/30 rounded-3xl border border-dashed border-slate-200 dark:border-gray-700 p-8 text-center">
+          <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-400 space-y-4 bg-white dark:bg-gray-900 rounded-3xl border border-dashed border-slate-200 dark:border-gray-700 p-8 text-center shadow-md">
             <ChefHat size={64} className="opacity-20" />
             <p className="text-lg">Ingresa lo que tienes en tu nevera y te daré opciones para preparar.</p>
             {complexityValue <= 1 && (
@@ -455,7 +483,7 @@ Devuelve SOLO este JSON:
             </h3>
             <div className="grid gap-4">
               {suggestions.map((sugg) => (
-                <div key={sugg.id} className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col sm:flex-row gap-6 items-start sm:items-center hover:border-[--c-primary-border] transition-colors">
+                <div key={sugg.id} className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-gray-700 flex flex-col sm:flex-row gap-6 items-start sm:items-center hover:border-[--c-primary-border] transition-colors">
                   <div className="flex-1">
                     <span className="text-xs font-bold px-3 py-1 rounded-full inline-block mb-2" style={{ background: 'var(--c-primary-light)', color: 'var(--c-primary)' }}>
                       {sugg.type}
