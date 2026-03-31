@@ -91,32 +91,7 @@ export function compactProfile(profile) {
   if (profile.useProteinPowder) parts.push('ProtPolvo:Si');
   if (profile.budgetFriendly) parts.push('Economico:Si');
   if (profile.preferredSupermarket) parts.push(`Super:${profile.preferredSupermarket}`);
-  // Localización — guía a la IA para usar nombres locales de ingredientes y marcas
-  if (profile.country && profile.country !== 'Chile') parts.push(`Pais:${profile.country}`);
-  if (profile.language && profile.language !== 'es') parts.push(`Idioma:${profile.language}`);
   return parts.join(' | ');
-}
-
-// Mapa de nombres locales de ingredientes según país
-export const LOCAL_INGREDIENT_NAMES = {
-  Chile:    { aguacate: 'palta', maíz: 'choclo', durazno: 'duraznero', frijoles: 'porotos', papas: 'papas' },
-  México:   { palta: 'aguacate', choclo: 'elote', porotos: 'frijoles', papas: 'papas' },
-  España:   { palta: 'aguacate', choclo: 'maíz', porotos: 'alubias', papas: 'patatas' },
-  Argentina:{ aguacate: 'palta', maíz: 'choclo', frijoles: 'porotos', papas: 'papas' },
-  Colombia: { palta: 'aguacate', choclo: 'mazorca', porotos: 'fríjoles' },
-};
-
-// Instrucción de localización para el prompt
-export function buildLocaleInstruction(profile) {
-  const country = profile.country || 'Chile';
-  const lang = profile.language || 'es';
-  const langNames = { es: 'español', en: 'inglés', he: 'hebreo', pt: 'portugués', fr: 'francés' };
-  const langName = langNames[lang] || 'español';
-  const localNames = LOCAL_INGREDIENT_NAMES[country] || {};
-  const nameExamples = Object.keys(localNames).length
-    ? ` Usa nombres locales de ${country} (ej: ${Object.entries(localNames).slice(0,2).map(([k,v]) => `"${v}" en vez de "${k}"`).join(', ')}).`
-    : '';
-  return `Responde en ${langName}. Adapta ingredientes y marcas para ${country}.${nameExamples}`;
 }
 
 // ── Cooldown ─────────────────────────────────────────────────────────────────
@@ -228,4 +203,167 @@ export async function callGeminiVisionAPI(promptText, base64Image, mimeType) {
   };
   const data = await fetchGeminiContent({ kind: 'vision', payload });
   return data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ── Localización ──────────────────────────────────────────────────────────────
+// Nombres de ingredientes por país — evita que la IA use términos de otro país
+export const LOCAL_INGREDIENT_NAMES = {
+  Chile: {
+    fresa: 'frutilla', aguacate: 'palta', calabaza: 'zapallo',
+    maíz: 'choclo', alubia: 'poroto', judía: 'poroto',
+    melocotón: 'durazno', albaricoque: 'damasco', plátano: 'plátano (banana)',
+    boniato: 'camote', patata: 'papa', tortilla: 'tortilla de maíz',
+    cacahuete: 'maní', zumo: 'jugo', nata: 'crema',
+  },
+  México: {
+    palta: 'aguacate', choclo: 'elote', poroto: 'frijol',
+    frutilla: 'fresa', papa: 'papa', damasco: 'chabacano',
+    maní: 'cacahuate', zumo: 'jugo', nata: 'crema',
+  },
+  España: {
+    palta: 'aguacate', choclo: 'maíz', poroto: 'alubias',
+    papa: 'patata', camote: 'boniato', frutilla: 'fresa',
+    maní: 'cacahuete', jugo: 'zumo', crema: 'nata',
+  },
+  Argentina: {
+    aguacate: 'palta', maíz: 'choclo', judía: 'poroto',
+    patata: 'papa', boniato: 'batata', fresa: 'frutilla',
+    melocotón: 'durazno', zumo: 'jugo',
+  },
+  Colombia: {
+    palta: 'aguacate', choclo: 'mazorca', poroto: 'fríjol',
+    papa: 'papa', patata: 'papa', frutilla: 'fresa',
+    maní: 'maní', zumo: 'jugo',
+  },
+};
+
+// Marcas Kosher disponibles por país (para la guía de compra)
+export const KOSHER_BRANDS_BY_COUNTRY = {
+  Chile: ['Kirkland Signature (Costco)', 'Philadelphia (certificado)', 'Nestlé línea Kosher', 'Unilever productos certificados'],
+  Argentina: ['Kosher Buenos Aires', 'Lácteos Kosher Argentina', 'Philadelphia'],
+  México: ['Borden Kosher', 'Philadelphia', 'Nestlé certificados'],
+  Israel: ['Tnuva', 'Strauss', 'Osem', 'Telma'],
+  España: ['Carrefour Kosher', 'Philadelphia', 'Rakusens'],
+  'Estados Unidos': ['Kirkland Signature', 'Philadelphia', 'Nathan\'s', 'Manischewitz'],
+};
+
+// Marcas Halal disponibles por país
+export const HALAL_BRANDS_BY_COUNTRY = {
+  Chile: ['Sadia Halal', 'carnes certificadas en supermercados árabes', 'Mr. Chicken Halal'],
+  Argentina: ['La Preferida Halal', 'carnicerías certificadas'],
+  España: ['Carrefour Halal', 'Mercadona certificados Halal'],
+  Colombia: ['Zenú Halal', 'carnicerías certificadas'],
+};
+
+// Genera instrucción de localización para el prompt
+export function buildLocaleInstruction(profile) {
+  const country = profile.country || 'Chile';
+  const lang = profile.language || 'es';
+  const langNames = { es: 'español', en: 'inglés', he: 'hebreo', pt: 'portugués', fr: 'francés' };
+  const langName = langNames[lang] || 'español';
+  const localNames = LOCAL_INGREDIENT_NAMES[country] || {};
+
+  // Solo incluir 2-3 ejemplos para no saturar el prompt
+  const examples = Object.entries(localNames).slice(0, 3)
+    .map(([k, v]) => `"${v}" (no "${k}")`)
+    .join(', ');
+
+  const examplesStr = examples ? ` Usa términos locales: ${examples}.` : '';
+  return `Responde en ${langName}. Adapta para ${country}.${examplesStr}`;
+}
+
+// Genera la instrucción de marca local según dieta religiosa y país
+export function buildLocalBrandInstruction(profile) {
+  const country = profile.country || 'Chile';
+  const diet = profile.religiousDiet;
+
+  if (diet === 'Kosher') {
+    const brands = KOSHER_BRANDS_BY_COUNTRY[country] || KOSHER_BRANDS_BY_COUNTRY['Chile'];
+    return `Para certificación Kosher en ${country}, marcas disponibles: ${brands.join(', ')}.`;
+  }
+  if (diet === 'Halal') {
+    const brands = HALAL_BRANDS_BY_COUNTRY[country] || [];
+    return brands.length
+      ? `Para certificación Halal en ${country}: ${brands.join(', ')}.`
+      : '';
+  }
+  return '';
+}
+
+// ── Filtro de tiempo de preparación ──────────────────────────────────────────
+export const TIME_OPTIONS = [
+  { value: '15', label: '15 min · Express', emoji: '⚡' },
+  { value: '30', label: '30 min · Estándar', emoji: '🕐' },
+  { value: '60', label: '60 min · Elaborado', emoji: '🍳' },
+  { value: 'none', label: 'Sin límite', emoji: '∞' },
+];
+
+// Instrucción de tiempo para incluir en el prompt
+export function buildTimeConstraint(maxTime) {
+  if (!maxTime || maxTime === 'none') return '';
+  return `TIEMPO MÁXIMO: La receta DEBE prepararse en menos de ${maxTime} minutos totales (prep + cocción combinados). Si no es posible, elige una versión más rápida del plato.`;
+}
+
+// ── Detección de intención de búsqueda ───────────────────────────────────────
+// Determina si el usuario busca un plato/receta específica (modo literal)
+// o una idea general (modo creativo).
+// Modo literal → la IA devuelve SOLO la receta exacta sin acompañamientos.
+// Modo creativo → la IA puede sugerir variaciones.
+export function detectSearchIntent(query) {
+  if (!query?.trim()) return 'creative';
+  const q = query.trim().toLowerCase();
+
+  // Señales de búsqueda literal — el usuario sabe exactamente lo que quiere
+  const LITERAL_SIGNALS = [
+    // Métodos de cocción específicos
+    'en airfryer', 'en air fryer', 'al vapor', 'a la plancha', 'al horno', 'frito',
+    'hervido', 'marinado', 'asado', 'gratinado', 'al wok', 'en olla',
+    // Platos con nombre propio o muy específicos
+    'falafel', 'shakshuka', 'ramen', 'pad thai', 'tacos de', 'sushi', 'ceviche',
+    'hummus', 'guacamole', 'tzatziki', 'chimichurri', 'pesto', 'carbonara',
+    // Modificadores precisos
+    'sin ', 'con solo', 'solo con', 'únicamente', 'solamente',
+    // Números (sugiere precisión: "2 ingredientes", "3 pasos")
+  ];
+
+  // Señales de búsqueda creativa — el usuario quiere ideas
+  const CREATIVE_SIGNALS = [
+    'algo', 'ideas', 'sugerencias', 'qué puedo', 'qué hacer', 'opciones',
+    'para cenar', 'para almorzar', 'con lo que tengo', 'creativo', 'diferente',
+    'sorpréndeme', 'antojo',
+  ];
+
+  const hasLiteral = LITERAL_SIGNALS.some(s => q.includes(s));
+  const hasCreative = CREATIVE_SIGNALS.some(s => q.includes(s));
+
+  // Si hay señal literal explícita, priorizar modo literal
+  if (hasLiteral && !hasCreative) return 'literal';
+  // Si tiene ambas o solo creativo, modo creativo
+  if (hasCreative) return 'creative';
+
+  // Heurística adicional: queries cortas y específicas (<= 3 palabras) son literales
+  const wordCount = q.split(/\s+/).filter(Boolean).length;
+  if (wordCount <= 3 && !hasCreative) return 'literal';
+
+  return 'creative';
+}
+
+// Construye el prompt según el modo detectado
+export function buildSearchPrompt({ query, mode, profileStr, localeStr, brandInstruction, favoritesStr }) {
+  const favPart = favoritesStr ? ` Le gustan: ${favoritesStr}.` : '';
+  const brandPart = brandInstruction ? `\n${brandInstruction}` : '';
+
+  if (mode === 'literal') {
+    return `${localeStr}
+El usuario busca EXACTAMENTE: "${query}".
+Perfil: ${profileStr}.${favPart}${brandPart}
+MODO LITERAL: Devuelve SOLO la receta exacta que pidió. NO añadas acompañamientos, ensaladas ni menús completos a menos que el usuario los pida expresamente. Si especificó un método de cocción (ej: "en airfryer"), úsalo obligatoriamente.
+Devuelve SOLO este JSON con 1 receta:
+{"suggestions":[{"id":1,"name":"[nombre exacto tal como lo pidió]","type":"[método si lo especificó]","description":"Receta exacta sin variaciones"}]}`;
+  }
+
+  return `${localeStr}
+El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${brandPart}
+Devuelve SOLO este JSON:
+{"suggestions":[{"id":1,"name":"...","type":"...","description":"..."},{"id":2,"name":"...","type":"...","description":"..."},{"id":3,"name":"...","type":"...","description":"..."}]}`;
 }

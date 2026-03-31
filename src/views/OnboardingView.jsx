@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Apple, ChefHat, CheckCircle2, ChevronRight, Dumbbell, Globe, ShoppingBag, Target } from 'lucide-react';
+import { Activity, Apple, BookOpen, ChefHat, CheckCircle2, ChevronRight, Dumbbell, ShoppingBag, Target } from 'lucide-react';
 import { useAppState } from '../context/appState.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
@@ -20,22 +20,9 @@ const STEPS = [
   { id: 'body', title: 'Biometría', icon: Activity },
   { id: 'sport', title: 'Deporte', icon: Dumbbell },
   { id: 'diet', title: 'Dieta', icon: Apple },
+  { id: 'religion', title: 'Religión/Ética', icon: BookOpen },
   { id: 'shopping', title: 'Supermercado', icon: ShoppingBag },
-  { id: 'locale', title: 'País/Idioma', icon: Globe },
   { id: 'done', title: '¡Listo!', icon: CheckCircle2 },
-];
-
-
-const COUNTRIES = [
-  'Chile', 'Argentina', 'México', 'Colombia', 'Perú', 'España',
-  'Venezuela', 'Ecuador', 'Uruguay', 'Bolivia', 'Israel', 'Estados Unidos',
-];
-const LANGUAGES = [
-  { code: 'es', label: 'Español', flag: '🇪🇸' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'he', label: 'עברית', flag: '🇮🇱' },
-  { code: 'pt', label: 'Português', flag: '🇧🇷' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷' },
 ];
 
 const CHILE_SUPERMARKETS = ['Sin preferencia', 'Líder', 'Jumbo', 'Santa Isabel', 'Unimarc', 'Tottus', 'Tienda especializada (GNC, Nutri Express)'];
@@ -255,8 +242,50 @@ export default function OnboardingView() {
           )}
 
 
-          {/* Paso 5: Supermercado */}
+          {/* Paso 5: Dieta religiosa y ética */}
           {step === 5 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-black text-slate-800 dark:text-white">Restricciones religiosas y éticas</h2>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">
+                Fundamental para que la IA nunca sugiera ingredientes no permitidos. Opcional — puedes saltarlo.
+              </p>
+              <div className="space-y-2">
+                {[
+                  { value: 'Ninguna', emoji: '—', desc: 'Sin restricciones religiosas' },
+                  { value: 'Kosher', emoji: '✡️', desc: 'Sin mezcla carne/lácteos · carne certificada' },
+                  { value: 'Halal', emoji: '☪️', desc: 'Sin cerdo ni alcohol · carne certificada' },
+                  { value: 'Hindú (Sin carne de res)', emoji: '🕉️', desc: 'Sin carne de res ni derivados' },
+                  { value: 'Jainista', emoji: '🟡', desc: 'Sin carne, huevos ni raíces (ajo, cebolla)' },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setProfile(p => ({ ...p, religiousDiet: opt.value }))}
+                    className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 transition-all text-left ${ profile.religiousDiet === opt.value ? 'border-[--c-primary] bg-[--c-primary-light]' : 'border-slate-200 dark:border-gray-700 hover:border-[--c-primary-border]' }`}
+                  >
+                    <span className="text-2xl shrink-0">{opt.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm text-slate-800 dark:text-white">{opt.value}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-snug">{opt.desc}</p>
+                    </div>
+                    {profile.religiousDiet === opt.value && <CheckCircle2 size={16} className="shrink-0" style={{ color: 'var(--c-primary)' }} />}
+                  </button>
+                ))}
+              </div>
+              {profile.religiousDiet === 'Kosher' && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-700 dark:text-blue-300">
+                  ✡️ La app buscará marcas Kosher certificadas en <strong>{profile.country || 'tu país'}</strong>.
+                </div>
+              )}
+              {profile.religiousDiet === 'Halal' && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300">
+                  ☪️ Las recetas excluirán cerdo, alcohol y carnes no certificadas Halal.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Paso 6: Supermercado */}
+          {step === 6 && (
             <div className="space-y-4">
               <h2 className="text-xl font-black text-slate-800 dark:text-white">¿Dónde compras habitualmente?</h2>
               <p className="text-slate-500 dark:text-slate-400 text-xs">Así la IA puede sugerirte marcas que realmente encuentras cerca. Opcional.</p>
@@ -276,47 +305,6 @@ export default function OnboardingView() {
                 ))}
               </div>
               <p className="text-xs text-slate-400 dark:text-slate-500">Las sugerencias de marcas priorizarán lo que encuentras en tu supermercado.</p>
-            </div>
-          )}
-
-
-          {/* Paso 6: País e Idioma */}
-          {step === 6 && (
-            <div className="space-y-5">
-              <h2 className="text-xl font-black text-slate-800 dark:text-white">¿Dónde vives y en qué idioma?</h2>
-              <p className="text-slate-500 dark:text-slate-400 text-xs">La IA usará nombres locales de ingredientes y responderá en tu idioma.</p>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">País</label>
-                <select
-                  value={profile.country || 'Chile'}
-                  onChange={e => setProfile(p => ({ ...p, country: e.target.value }))}
-                  className="w-full p-3 rounded-xl border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white text-sm outline-none min-h-[48px]"
-                >
-                  {COUNTRIES.map(co => <option key={co}>{co}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">Idioma de respuesta</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {LANGUAGES.map(lang => (
-                    <button
-                      key={lang.code}
-                      onClick={() => setProfile(p => ({ ...p, language: lang.code }))}
-                      className={`flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-semibold transition-all min-h-[48px] ${
-                        (profile.language || 'es') === lang.code
-                          ? 'border-[--c-primary] bg-[--c-primary-light] text-[--c-primary-text]'
-                          : 'border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      <span className="text-lg">{lang.flag}</span>
-                      {lang.label}
-                      {(profile.language || 'es') === lang.code && <CheckCircle2 size={13} className="ml-auto" style={{ color: 'var(--c-primary)' }} />}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
