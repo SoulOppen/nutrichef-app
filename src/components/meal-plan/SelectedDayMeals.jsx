@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   Calendar,
   ChefHat,
+  ChevronDown,
+  ChevronUp,
   Edit3,
   Minus,
   Plus,
@@ -162,6 +164,7 @@ export default function SelectedDayMeals({
 }) {
   const [selectedOptions, setSelectedOptions] = useState({});
   const [detailSelection, setDetailSelection] = useState(null);
+  const [expandedMeals, setExpandedMeals] = useState({});
 
   useEffect(() => {
     const defaults = {};
@@ -170,6 +173,7 @@ export default function SelectedDayMeals({
     });
     setSelectedOptions(defaults);
     setDetailSelection(null);
+    setExpandedMeals({});
   }, [day?.dayName]);
 
   const dayWarnings = useMemo(
@@ -243,6 +247,7 @@ export default function SelectedDayMeals({
             const selectedServings = parseServingsCount(option?.selectedServings || option?.servings || baseServings);
             const factor = selectedServings / baseServings;
             const isRecipeOpen = detailSelection?.mealIndex === mealIndex && detailSelection?.optionIndex === optionIndex;
+            const isExpanded = expandedMeals[mealIndex] ?? false;
 
             if (!option) return null;
 
@@ -251,128 +256,149 @@ export default function SelectedDayMeals({
                 key={`meal-${mealIndex}`}
                 className={`rounded-3xl border bg-white p-4 shadow-md transition-all ${isRecipeOpen ? theme.selected : ''}`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wide ${theme.badge}`}>
+                {/* Zona A: fila compacta, siempre visible */}
+                <div className="flex items-center gap-3">
+                  <div className={`shrink-0 inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wide ${theme.badge}`}>
                     {meal.type}
                   </div>
+                  <span className="flex-1 truncate text-sm font-bold text-slate-800">{option.name}</span>
+                  <span className={`shrink-0 rounded-xl px-3 py-1 text-xs font-black ${theme.pill}`}>
+                    {scaleNutritionLabel(option.calories, factor)}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => onSwapStart({ dayIdx: selectedDayIdx, mealIdx: mealIndex, currentMealName: option.name || 'Comida' })}
-                    className="inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    onClick={() => setExpandedMeals(current => ({ ...current, [mealIndex]: !current[mealIndex] }))}
+                    className="shrink-0 rounded-xl border border-slate-200 bg-white p-1.5 text-slate-400 transition-colors hover:text-slate-700"
+                    aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
                   >
-                    <Edit3 size={14} /> Cambiar
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                 </div>
 
-                <div className={`mt-4 rounded-2xl border p-4 ${theme.card}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h4 className="text-lg font-bold tracking-tight text-slate-800">{option.name}</h4>
-                      <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-600">{option.description}</p>
+                {/* Zona B: detalles expandibles */}
+                {isExpanded && (
+                  <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => onSwapStart({ dayIdx: selectedDayIdx, mealIdx: mealIndex, currentMealName: option.name || 'Comida' })}
+                        className="inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        <Edit3 size={14} /> Cambiar
+                      </button>
                     </div>
-                    <span className={`shrink-0 rounded-xl px-3 py-1 text-xs font-black ${theme.pill}`}>
-                      {scaleNutritionLabel(option.calories, factor)}
-                    </span>
-                  </div>
 
-                  {meal.options?.length > 1 && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {meal.options.map((mealOption, currentOptionIndex) => (
+                    <div className={`rounded-2xl border p-4 ${theme.card}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="text-lg font-bold tracking-tight text-slate-800">{option.name}</h4>
+                          <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-600">{option.description}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-xl px-3 py-1 text-xs font-black ${theme.pill}`}>
+                          {scaleNutritionLabel(option.calories, factor)}
+                        </span>
+                      </div>
+
+                      {meal.options?.length > 1 && (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {meal.options.map((mealOption, currentOptionIndex) => (
+                            <button
+                              key={`${meal.type}-${currentOptionIndex}`}
+                              type="button"
+                              onClick={() => setSelectedOptions(current => ({ ...current, [mealIndex]: currentOptionIndex }))}
+                              className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
+                                optionIndex === currentOptionIndex
+                                  ? 'bg-slate-900 text-white shadow-sm'
+                                  : 'border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                              }`}
+                            >
+                              {mealOption.name || `Opción ${currentOptionIndex + 1}`}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
+                          🥩 {scaleNutritionLabel(option.protein, factor)}
+                        </span>
+                        <span className="rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
+                          🌿 {scaleNutritionLabel(option.fiber, factor)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Porciones</p>
+                        <p className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                          <Users size={14} className={theme.accent} /> {selectedServings} personas
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
                         <button
-                          key={`${meal.type}-${currentOptionIndex}`}
                           type="button"
-                          onClick={() => setSelectedOptions(current => ({ ...current, [mealIndex]: currentOptionIndex }))}
-                          className={`rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
-                            optionIndex === currentOptionIndex
-                              ? 'bg-slate-900 text-white shadow-sm'
-                              : 'border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                          }`}
+                          onClick={() => onServingsChange(selectedDayIdx, mealIndex, optionIndex, selectedServings - 1)}
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-[--c-primary-border] hover:bg-[--c-primary-light]"
+                          aria-label="Reducir porciones"
                         >
-                          {mealOption.name || `Opción ${currentOptionIndex + 1}`}
+                          <Minus size={16} />
                         </button>
-                      ))}
+                        <button
+                          type="button"
+                          onClick={() => onServingsChange(selectedDayIdx, mealIndex, optionIndex, selectedServings + 1)}
+                          className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-[--c-primary-border] hover:bg-[--c-primary-light]"
+                          aria-label="Aumentar porciones"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
-                      🥩 {scaleNutritionLabel(option.protein, factor)}
-                    </span>
-                    <span className="rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-slate-600 shadow-sm">
-                      🌿 {scaleNutritionLabel(option.fiber, factor)}
-                    </span>
-                  </div>
-                </div>
+                    {swappingData?.dayIdx === selectedDayIdx && swappingData?.mealIdx === mealIndex && (
+                      <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 animate-in slide-in-from-top-2">
+                        <label className="block text-sm font-bold text-orange-900">¿Qué cambio te gustaría hacer?</label>
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            type="text"
+                            value={customSwapRequest}
+                            onChange={(e) => onSwapRequestChange(e.target.value)}
+                            placeholder="Ej: más liviano, sin huevo, listo en 15 min..."
+                            className="flex-1 rounded-xl border border-orange-300 bg-white p-3 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-orange-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={onSwapConfirm}
+                            disabled={isSwapping || !customSwapRequest.trim()}
+                            className="flex min-w-[92px] items-center justify-center rounded-xl bg-orange-600 px-4 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
+                          >
+                            {isSwapping ? <RefreshCw className="animate-spin" size={16} /> : 'Generar'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onSwapCancel}
+                            className="rounded-xl border border-orange-200 bg-white p-3 text-slate-400 transition-colors hover:text-red-500"
+                            aria-label="Cancelar cambio"
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
-                <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">Porciones</p>
-                    <p className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
-                      <Users size={14} className={theme.accent} /> {selectedServings} personas
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => onServingsChange(selectedDayIdx, mealIndex, optionIndex, selectedServings - 1)}
-                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-[--c-primary-border] hover:bg-[--c-primary-light]"
-                      aria-label="Reducir porciones"
+                      onClick={() => {
+                        setSelectedOptions(current => ({ ...current, [mealIndex]: optionIndex }));
+                        setDetailSelection({ mealIndex, optionIndex, option });
+                        onGenerateRecipe(option);
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800"
                     >
-                      <Minus size={16} />
+                      <ChefHat size={16} /> Ver Detalle
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onServingsChange(selectedDayIdx, mealIndex, optionIndex, selectedServings + 1)}
-                      className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-[--c-primary-border] hover:bg-[--c-primary-light]"
-                      aria-label="Aumentar porciones"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                </div>
-
-                {swappingData?.dayIdx === selectedDayIdx && swappingData?.mealIdx === mealIndex && (
-                  <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4 animate-in slide-in-from-top-2">
-                    <label className="block text-sm font-bold text-orange-900">¿Qué cambio te gustaría hacer?</label>
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        type="text"
-                        value={customSwapRequest}
-                        onChange={(e) => onSwapRequestChange(e.target.value)}
-                        placeholder="Ej: más liviano, sin huevo, listo en 15 min..."
-                        className="flex-1 rounded-xl border border-orange-300 bg-white p-3 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-orange-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={onSwapConfirm}
-                        disabled={isSwapping || !customSwapRequest.trim()}
-                        className="flex min-w-[92px] items-center justify-center rounded-xl bg-orange-600 px-4 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
-                      >
-                        {isSwapping ? <RefreshCw className="animate-spin" size={16} /> : 'Generar'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onSwapCancel}
-                        className="rounded-xl border border-orange-200 bg-white p-3 text-slate-400 transition-colors hover:text-red-500"
-                        aria-label="Cancelar cambio"
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
                   </div>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedOptions(current => ({ ...current, [mealIndex]: optionIndex }));
-                    setDetailSelection({ mealIndex, optionIndex, option });
-                    onGenerateRecipe(option);
-                  }}
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800"
-                >
-                  <ChefHat size={16} /> Ver Detalle
-                </button>
               </div>
             );
           })}

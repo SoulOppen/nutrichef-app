@@ -78,7 +78,7 @@ export default function MealPlanHeader({
                     onClick={() => onSelectDay(idx)}
                     title={day.dayName}
                     aria-label={`Seleccionar ${day.dayName}`}
-                    className={`h-12 w-12 rounded-2xl border text-sm font-black transition-all ${
+                    className={`h-10 w-10 rounded-full border text-sm font-black transition-all ${
                       isActive
                         ? 'border-transparent bg-[--c-primary] text-white shadow-md'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-[--c-primary-border] hover:bg-[--c-primary-light]'

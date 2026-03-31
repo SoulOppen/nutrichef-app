@@ -127,7 +127,7 @@ function IngredientRow({ ing }) {
               : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
           }`}>
             <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-            <span>{hasAlert ? 'Cambiar por' : 'Sub:'} {ing.substitute}</span>
+            <span>{hasAlert ? 'Sustituto sugerido:' : 'Sub:'} {ing.substitute}</span>
           </div>
         )}
       </div>

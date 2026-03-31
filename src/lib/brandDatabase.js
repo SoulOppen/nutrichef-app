@@ -134,7 +134,8 @@ Si el usuario tiene una restricción por Alergia, Dieta Religiosa o Estilo Veget
 CONSIDERA ESTO UNA ORDEN: Bajo ninguna circunstancia sugieras ingredientes presentes en la lista de Alergias del usuario.
 Si la receta tradicionalmente lleva ese ingrediente, SUSTITUYELO automaticamente por una alternativa segura y coherente.
 NO sugieras marcas que no tengan certificación Kosher si el modo está activo, ni ingredientes con alérgenos declarados, incluso si son económicos.
-Restricciones activas: ${rules.join(' | ')}.`;
+Restricciones activas: ${rules.join(' | ')}.
+ORDEN DE PRIORIDAD EN CONFLICTOS: Prioridad 1: Alergias. Prioridad 2: Dieta Religiosa (Kosher/Pésaj). Prioridad 3: Estilo de vida (Vegano/Vegetariano). Si hay conflicto entre restricciones, la restricción de salud/religión siempre domina sobre la de estilo de vida.`;
 }
 
 export function isBrandCompatibleWithProfile(brand, profile) {

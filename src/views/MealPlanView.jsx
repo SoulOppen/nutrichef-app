@@ -28,6 +28,8 @@ import {
   SHOPPING_CACHE_KEY,
   GENERATOR_RECIPE_CACHE_KEY,
   RECIPE_JSON_SCHEMA,
+  readStoredJson,
+  writeStoredJson,
 } from '../lib/gemini.js';
 import { clampServings, parseServingsCount } from '../lib/recipeScaling.js';
 
@@ -109,17 +111,22 @@ export default function MealPlanView() {
   const [isSwapping, setIsSwapping] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [generatingRecipe, setGeneratingRecipe] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({
-    summary: true,
-    meals: true,
-    shopping: true,
-  });
+  const SECTION_PREFS_KEY = 'nutrichef_section_prefs';
+  const DEFAULT_SECTIONS = { summary: true, meals: true, shopping: true };
+  const [expandedSections, setExpandedSections] = useState(
+    () => ({ ...DEFAULT_SECTIONS, ...readStoredJson(SECTION_PREFS_KEY, {}) })
+  );
+  const [activeTab, setActiveTab] = useState('meals');
 
   const profileStr = compactProfile(profile);
   const favStr = favoriteRecipes?.length > 0 ? favoriteRecipes.map(r => r.title).join(', ') : '';
 
   const toggleSection = (section) => {
-    setExpandedSections(current => ({ ...current, [section]: !current[section] }));
+    setExpandedSections(current => {
+      const next = { ...current, [section]: !current[section] };
+      writeStoredJson(SECTION_PREFS_KEY, next);
+      return next;
+    });
   };
 
   const handleSelectDay = (nextDayIdx) => {
@@ -343,59 +350,92 @@ ${RECIPE_JSON_SCHEMA}`;
       )}
 
       {plan && !loading && (
-        <div className="space-y-6">
-          <CollapsibleSection
-            title="Resumen Nutricional"
-            subtitle="Una vista rápida de tu objetivo semanal antes de entrar al detalle."
-            icon={BarChart3}
-            isExpanded={expandedSections.summary}
-            onToggle={() => toggleSection('summary')}
-          >
-            <PlanSummary plan={plan} />
-          </CollapsibleSection>
+        <div>
+          {/* Tab bar — solo móvil */}
+          <div className="mb-4 flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm lg:hidden">
+            <button
+              type="button"
+              onClick={() => setActiveTab('meals')}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition-all ${
+                activeTab === 'meals' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              🍽 Comidas
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('shopping')}
+              className={`flex-1 rounded-xl py-2.5 text-sm font-bold transition-all ${
+                activeTab === 'shopping' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              🛒 Lista
+            </button>
+          </div>
 
-          <CollapsibleSection
-            title="Comidas del Día"
-            subtitle="Selecciona una comida, ajusta porciones y abre el detalle solo cuando lo necesites."
-            icon={ChefHat}
-            isExpanded={expandedSections.meals}
-            onToggle={() => toggleSection('meals')}
-          >
-            <SelectedDayMeals
-              day={plan.days?.[selectedDayIdx]}
-              profile={profile}
-              selectedDayIdx={selectedDayIdx}
-              swappingData={swappingData}
-              customSwapRequest={customSwapRequest}
-              isSwapping={isSwapping}
-              selectedRecipe={selectedRecipe}
-              generatingRecipe={generatingRecipe}
-              onSwapStart={setSwappingData}
-              onSwapRequestChange={setCustomSwapRequest}
-              onSwapConfirm={handleSwapMeal}
-              onSwapCancel={() => setSwappingData(null)}
-              onGenerateRecipe={generateRecipeFromPlan}
-              onServingsChange={handleMealServingsChange}
-              onCloseRecipe={() => setSelectedRecipe(null)}
-            />
-          </CollapsibleSection>
+          {/* Grid: 2 columnas en PC, 1 en móvil */}
+          <div className="lg:grid lg:grid-cols-[1fr_380px] lg:items-start lg:gap-6">
 
-          <CollapsibleSection
-            title="Lista de Compras"
-            subtitle="Compra por pasillos, marca avances y mantén visible el costo semanal."
-            icon={ShoppingCart}
-            isExpanded={expandedSections.shopping}
-            onToggle={() => toggleSection('shopping')}
-          >
-            <ShoppingListSection
-              shoppingList={shoppingList}
-              loadingList={loadingList}
-              onGenerateShoppingList={generateShoppingList}
-              country={profile.country}
-              optimizeBudget={profile.budgetFriendly}
-              profile={profile}
-            />
-          </CollapsibleSection>
+            {/* Columna izquierda: Resumen + Comidas */}
+            <div className={`space-y-6 ${activeTab === 'shopping' ? 'hidden lg:block' : ''}`}>
+              <CollapsibleSection
+                title="Resumen Nutricional"
+                subtitle="Una vista rápida de tu objetivo semanal antes de entrar al detalle."
+                icon={BarChart3}
+                isExpanded={expandedSections.summary}
+                onToggle={() => toggleSection('summary')}
+              >
+                <PlanSummary plan={plan} />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Comidas del Día"
+                subtitle="Selecciona una comida, ajusta porciones y abre el detalle solo cuando lo necesites."
+                icon={ChefHat}
+                isExpanded={expandedSections.meals}
+                onToggle={() => toggleSection('meals')}
+              >
+                <SelectedDayMeals
+                  day={plan.days?.[selectedDayIdx]}
+                  profile={profile}
+                  selectedDayIdx={selectedDayIdx}
+                  swappingData={swappingData}
+                  customSwapRequest={customSwapRequest}
+                  isSwapping={isSwapping}
+                  selectedRecipe={selectedRecipe}
+                  generatingRecipe={generatingRecipe}
+                  onSwapStart={setSwappingData}
+                  onSwapRequestChange={setCustomSwapRequest}
+                  onSwapConfirm={handleSwapMeal}
+                  onSwapCancel={() => setSwappingData(null)}
+                  onGenerateRecipe={generateRecipeFromPlan}
+                  onServingsChange={handleMealServingsChange}
+                  onCloseRecipe={() => setSelectedRecipe(null)}
+                />
+              </CollapsibleSection>
+            </div>
+
+            {/* Columna derecha: Lista de compras (sticky en PC) */}
+            <div className={`lg:sticky lg:top-24 space-y-6 ${activeTab === 'meals' ? 'hidden lg:block' : ''}`}>
+              <CollapsibleSection
+                title="Lista de Compras"
+                subtitle="Compra por pasillos, marca avances y mantén visible el costo semanal."
+                icon={ShoppingCart}
+                isExpanded={expandedSections.shopping}
+                onToggle={() => toggleSection('shopping')}
+              >
+                <ShoppingListSection
+                  shoppingList={shoppingList}
+                  loadingList={loadingList}
+                  onGenerateShoppingList={generateShoppingList}
+                  country={profile.country}
+                  optimizeBudget={profile.budgetFriendly}
+                  profile={profile}
+                />
+              </CollapsibleSection>
+            </div>
+
+          </div>
         </div>
       )}
     </div>
