@@ -170,7 +170,7 @@ export function buildExploreCacheKey({ query, mode, profile }) {
 }
 export function buildMealPlanCacheKey({ planType, isTrainingDay, planPreferences, profile, savedMeals }) {
   return JSON.stringify({
-    v: 'mealplan-safety-v2',
+    v: 'mealplan-options-v3',
     t: planType,
     tr: isTrainingDay,
     p: planPreferences,
