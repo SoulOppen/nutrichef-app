@@ -80,69 +80,91 @@ function IngredientRow({ ing }) {
   const [checked, setChecked] = useState(false);
   const isDanger = ing.allergyAlert;
   const isDislike = ing.isDislike && !ing.allergyAlert;
-  const hasAlert = isDanger || isDislike;
 
-  const statusLabel = isDanger
-    ? `⚠️ PELIGRO: ${ing.matchedAllergy || 'alérgeno detectado'}`
-    : isDislike
-      ? 'No te gusta'
-      : '';
+  // Build the quantity string: prefer structured fields, fall back to legacy amount
+  const qty = ing.cantidad && ing.unidad
+    ? `${ing.cantidad} ${ing.unidad}`
+    : ing.cantidad || ing.unidad || ing.amount || '';
 
   return (
     <li
-      onClick={() => setChecked(current => !current)}
-      className={`flex cursor-pointer select-none items-start gap-3 rounded-2xl border p-3.5 transition-all ${
+      onClick={() => setChecked(c => !c)}
+      className={`flex cursor-pointer select-none items-start gap-3 rounded-xl border px-3 py-2.5 transition-all ${
         isDanger
-          ? 'border-red-300 bg-red-100 dark:border-red-700 dark:bg-red-900/30'
+          ? 'border-red-300 bg-red-50 dark:border-red-700 dark:bg-red-900/20'
           : isDislike
-          ? 'border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-900/10'
+          ? 'border-orange-200 bg-orange-50/60 dark:border-orange-800 dark:bg-orange-900/10'
           : checked
-          ? 'border-green-200 bg-green-50 opacity-70 dark:border-green-800 dark:bg-green-900/20'
-          : 'border-slate-200 bg-slate-50 hover:border-[--c-primary-border] dark:border-gray-700 dark:bg-gray-800'
+          ? 'border-green-200 bg-green-50 opacity-60 dark:border-green-800 dark:bg-green-900/20'
+          : 'border-slate-100 bg-white hover:border-slate-200 dark:border-gray-700 dark:bg-gray-900'
       }`}
     >
-      <div className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
-        checked ? 'border-green-500 bg-green-500' : 'border-slate-300 dark:border-gray-500'
+      {/* Checkbox */}
+      <div className={`mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
+        checked ? 'border-green-500 bg-green-500' : isDanger ? 'border-red-400' : 'border-slate-300 dark:border-gray-500'
       }`}>
-        {checked && <CheckCircle2 size={11} className="text-white" />}
+        {checked && <CheckCircle2 size={9} className="text-white" />}
       </div>
 
+      {/* Main content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className={`text-base font-semibold leading-snug ${
-              checked ? 'line-through text-slate-400'
-              : isDanger ? 'line-through text-red-700 dark:text-red-300'
-              : isDislike ? 'text-orange-700 dark:text-orange-300'
-              : 'text-slate-800 dark:text-white'
-            }`}>
-              {ing.name}
-            </p>
-            {statusLabel && (
-              <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-black ${
-                isDanger
-                  ? 'bg-red-200 text-red-800 dark:bg-red-900/50 dark:text-red-200'
-                  : 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300'
-              }`}>
-                {statusLabel}
+        {/* Top row: qty + name */}
+        <div className="flex items-baseline gap-2 flex-wrap">
+          {qty && (
+            <span className="shrink-0 text-xs font-black text-slate-400 dark:text-slate-500 tabular-nums">
+              {qty}
+            </span>
+          )}
+          <span className={`text-sm font-semibold leading-snug ${
+            checked ? 'line-through text-slate-400'
+            : isDanger ? 'line-through text-red-700 dark:text-red-400'
+            : isDislike ? 'text-orange-700 dark:text-orange-300'
+            : 'text-slate-800 dark:text-white'
+          }`}>
+            {ing.name}
+          </span>
+        </div>
+
+        {/* Badge row */}
+        {(isDanger || isDislike || ing.es_seguro_kosher || ing.es_seguro_halal || ing.marca_sugerida) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {isDanger && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                ⚠️ {ing.matchedAllergy || 'alérgeno'}
+              </span>
+            )}
+            {isDislike && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">
+                No te gusta
+              </span>
+            )}
+            {ing.es_seguro_kosher && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300">
+                ✡️ Kosher
+              </span>
+            )}
+            {ing.es_seguro_halal && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300">
+                ☪️ Halal
+              </span>
+            )}
+            {ing.marca_sugerida && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-gray-800 dark:border-gray-700 dark:text-slate-300">
+                📦 {ing.marca_sugerida}
               </span>
             )}
           </div>
-          {ing.amount && (
-            <span className="shrink-0 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500 dark:border-gray-600 dark:bg-gray-700 dark:text-slate-200">
-              {ing.amount}
-            </span>
-          )}
-        </div>
+        )}
 
+        {/* Substitute line */}
         {ing.substitute && (
-          <div className={`mt-2 inline-flex items-start gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+          <div className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
             isDanger
               ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
               : 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
           }`}>
-            <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-            <span>{isDanger ? 'Sustituto sugerido:' : 'Sustituir por:'} {ing.substitute}</span>
+            <AlertTriangle size={9} className="shrink-0" />
+            {isDanger ? 'Sustituto:' : 'Cambiar por:'} {ing.substitute}
           </div>
         )}
       </div>
@@ -150,35 +172,21 @@ function IngredientRow({ ing }) {
   );
 }
 
-function SectionCard({ title, subtitle, icon: Icon, isOpen, onToggle, badge, children }) {
+function SectionCard({ title, icon: Icon, isOpen, onToggle, badge, children }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left lg:hidden">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Icon size={16} style={{ color: 'var(--c-primary)' }} />
-            <h3 className="text-base font-bold tracking-tight text-slate-800 dark:text-white">{title}</h3>
-          </div>
-          {subtitle && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
+    <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon size={14} style={{ color: 'var(--c-primary)' }} />
+          <h3 className="text-sm font-bold tracking-tight text-slate-800 dark:text-white truncate">{title}</h3>
         </div>
-        <div className="flex items-center gap-2">
-          {badge ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500 dark:bg-gray-800 dark:text-slate-300">{badge}</span> : null}
-          <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <div className="flex items-center gap-2 shrink-0">
+          {badge ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500 dark:bg-gray-800 dark:text-slate-300">{badge}</span> : null}
+          <ChevronDown size={15} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
       </button>
 
-      <div className="hidden items-start justify-between gap-3 px-5 pt-5 lg:flex">
-        <div>
-          <div className="flex items-center gap-2">
-            <Icon size={16} style={{ color: 'var(--c-primary)' }} />
-            <h3 className="text-sm font-black uppercase tracking-wide text-slate-800 dark:text-white">{title}</h3>
-          </div>
-          {subtitle && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
-        </div>
-        {badge ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500 dark:bg-gray-800 dark:text-slate-300">{badge}</span> : null}
-      </div>
-
-      <div className={`${isOpen ? 'block' : 'hidden'} px-4 pb-4 pt-0 lg:block lg:px-5 lg:pb-5 lg:pt-4`}>
+      <div className={`${isOpen ? 'block' : 'hidden'} px-4 pb-4 pt-1`}>
         {children}
       </div>
     </section>
@@ -570,15 +578,17 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
             </button>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 px-6 py-6 text-white md:px-8 md:py-8">
-            <div className="mb-3 flex flex-wrap gap-2">
-              <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur-sm">{recipe.cuisine || 'Receta IA'}</span>
-              {shareFeedback && <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-bold text-white">{shareFeedback}</span>}
+          <div className="absolute inset-x-0 bottom-0 px-6 py-5 text-white md:px-8 md:py-6">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm">{recipe.cuisine || 'Receta IA'}</span>
+              {shareFeedback && <span className="rounded-full bg-emerald-500/90 px-2.5 py-0.5 text-[10px] font-bold text-white">{shareFeedback}</span>}
             </div>
-            <h2 className="max-w-2xl text-xl font-bold tracking-tight sm:text-3xl">{recipe.title}</h2>
-            <p className="mt-2 max-w-2xl text-base text-white/85">{recipe.description}</p>
+            <h2 className="max-w-2xl text-lg font-black tracking-tight sm:text-2xl leading-tight">{recipe.title}</h2>
+            {recipe.description && (
+              <p className="mt-1 max-w-xl text-xs italic text-white/70 leading-relaxed line-clamp-2">{recipe.description}</p>
+            )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               <span className="flex items-center gap-1.5 rounded-xl bg-black/20 px-3 py-1.5 text-xs font-medium"><Clock size={13} /> {recipe.prepTime || '?'}</span>
               <span className="flex items-center gap-1.5 rounded-xl bg-black/20 px-3 py-1.5 text-xs font-medium"><ChefHat size={13} /> {recipe.cookTime || '?'}</span>
               {calories > 0 && <span className="flex items-center gap-1.5 rounded-xl bg-black/20 px-3 py-1.5 text-xs font-medium"><Zap size={13} /> {displayRecipe.macros.calories}</span>}
@@ -606,8 +616,8 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
           </div>
         </div>
       </div>
-      <div className="sticky top-16 z-20 -mt-5 mb-1 px-4 sm:px-6 md:-mt-6 md:px-8">
-        <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur dark:border-gray-700 dark:bg-gray-900/95">
+      <div className="sticky top-16 z-20 -mt-4 mb-1 px-4 sm:px-5 md:-mt-5 md:px-6">
+        <div className="rounded-2xl border border-slate-100 bg-white/95 px-3 py-2.5 shadow-md backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -642,19 +652,19 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
         </div>
       </div>
 
-      <div className="space-y-5 px-4 pb-6 pt-5 sm:px-6 md:px-8 md:pb-8">
+      <div className="space-y-4 px-4 pb-5 pt-4 sm:px-5 md:px-6 md:pb-6">
         {showAdjust && <AdjustPanel recipe={recipe} onRefined={handleRefined} onClose={() => { setShowAdjust(false); setHeroPreset(''); }} initialInstruction={heroPreset} />}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[0.95fr_1.15fr] lg:items-start lg:gap-6">
           <div className="space-y-4">
-            <SectionCard title={`Ingredientes (${displayRecipe.ingredients?.length || 0})`} subtitle="Toca cada ingrediente para marcarlo mientras cocinas." icon={ShoppingBag} isOpen={openSections.ingredients} onToggle={() => toggleSection('ingredients')} badge={`${selectedServings} pers.`}>
+            <SectionCard title={`Ingredientes (${displayRecipe.ingredients?.length || 0})`} icon={ShoppingBag} isOpen={openSections.ingredients} onToggle={() => toggleSection('ingredients')} badge={`${selectedServings} pers.`}>
               <ul className="space-y-2.5">
                 {displayRecipe.ingredients?.map((ing, index) => <IngredientRow key={index} ing={ing} />)}
               </ul>
             </SectionCard>
 
             {profile && (
-              <SectionCard title="Marcas Sugeridas" subtitle="Solo mostramos opciones 100% compatibles con tus restricciones." icon={ShieldCheck} isOpen={openSections.brands} onToggle={() => toggleSection('brands')} badge={verifiedBrands.length ? `${verifiedBrands.length} seguras` : 'Filtro total'}>
+              <SectionCard title="Marcas Sugeridas" icon={ShieldCheck} isOpen={openSections.brands} onToggle={() => toggleSection('brands')} badge={verifiedBrands.length ? `${verifiedBrands.length} seguras` : 'Filtro total'}>
                 <BrandSuggestions brands={verifiedBrands} />
               </SectionCard>
             )}
@@ -711,7 +721,7 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
               </div>
             )}
 
-            <SectionCard title={`Instrucciones (${recipe.steps?.length || 0})`} subtitle="Abre esta sección para seguir el paso a paso sin perder el contexto." icon={BookOpen} isOpen={openSections.steps} onToggle={() => toggleSection('steps')}>
+            <SectionCard title={`Instrucciones (${recipe.steps?.length || 0})`} icon={BookOpen} isOpen={openSections.steps} onToggle={() => toggleSection('steps')}>
               <div className="space-y-4">
                 {recipe.steps?.map((step, index) => (
                   <div key={index} className="flex gap-3">
@@ -727,7 +737,7 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
             </SectionCard>
 
             {recipe.tips && typeof recipe.tips === 'string' && (
-              <SectionCard title="Notas del Chef" subtitle="Consejos extra para el mejor resultado." icon={Info} isOpen={openSections.tips} onToggle={() => toggleSection('tips')}>
+              <SectionCard title="Notas del Chef" icon={Info} isOpen={openSections.tips} onToggle={() => toggleSection('tips')}>
                 <p className="text-sm leading-relaxed text-blue-900 dark:text-blue-200"><span className="font-bold">Tip: </span>{recipe.tips}</p>
               </SectionCard>
             )}

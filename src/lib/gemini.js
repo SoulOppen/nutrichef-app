@@ -281,7 +281,7 @@ Devuelve precios mínimos y máximos NUMÉRICOS por ingrediente, más total sema
 }
 
 // ── Schema JSON de receta (con seguridad de ingredientes) ─────────────────────
-export const RECIPE_JSON_SCHEMA = `{"title":"...","description":"...","prepTime":"...","cookTime":"...","cuisine":"...","servings":"...","ingredients":[{"name":"...","amount":"...","substitute":"...","suggestedSubstitute":"...","isDislike":false,"allergyAlert":false}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[{"name":"...","category":"kosher|halal|vegan|powerlifting|vegetariana","note":"..."}],"seguridad":"Apto [Dieta] - [motivo corto en 5 palabras max]"}`;
+export const RECIPE_JSON_SCHEMA = `{"title":"...","description":"máx 15 palabras, sin explicaciones largas","prepTime":"...","cookTime":"...","cuisine":"...","servings":"...","ingredients":[{"cantidad":"...","unidad":"...","nombre":"...","isDislike":false,"allergyAlert":false,"suggestedSubstitute":"...","es_seguro_kosher":false,"es_seguro_halal":false,"marca_sugerida":""}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[{"name":"...","category":"kosher|halal|vegan|powerlifting|vegetariana","note":"..."}],"seguridad":"Apto [Dieta] - [motivo corto en 5 palabras max]"}`;
 
 // ── Builder de prompt de receta con marcas ───────────────────────────────────
 export function buildRecipePrompt({ name, description, ingredients, profileStr, profile }) {
@@ -291,10 +291,16 @@ export function buildRecipePrompt({ name, description, ingredients, profileStr, 
   return `Receta completa para "${name}".${description ? ` Contexto: ${description}.` : ''}${ingredients ? ` Ingredientes: ${ingredients}.` : ''}
 Perfil: ${profileStr}.
 ${guardrail}${brandCtx}
-Marca cada ingrediente conflictivo con "isDislike" o "allergyAlert" y añade "suggestedSubstitute" inmediato si aplica.
-Los pasos deben ser concisos (máximo 12 palabras por paso).
+REGLAS ESTRICTAS DE FORMATO — INCUMPLIRLAS INVALIDA LA RESPUESTA:
+1. PROHIBIDO generar párrafos introductorios o explicaciones de por qué la receta se adapta al usuario. La salida es directa.
+2. El campo "description" tiene máximo 15 palabras. Sin justificaciones de dieta. Ejemplo: "Pollo al limón con hierbas, listo en 20 minutos".
+3. Cada ingrediente DEBE desglosarse en: "cantidad" (número), "unidad" (g/taza/cdta/unidad/etc.), "nombre" (solo el nombre del ingrediente, sin certificaciones ni texto extra).
+4. NUNCA incluyas "(apto Kosher)", "(certificado Halal)" ni ninguna justificación dentro del campo "nombre" del ingrediente.
+5. Si el ingrediente es seguro para la dieta del usuario, marca "es_seguro_kosher":true / "es_seguro_halal":true según corresponda. Si conoces una marca compatible, ponla en "marca_sugerida".
+6. Los pasos tienen máximo 12 palabras cada uno.
+7. Marca ingredientes problemáticos con "isDislike":true o "allergyAlert":true y añade "suggestedSubstitute".
 ${needsBrands ? 'Incluye marcas relevantes en "marcas_sugeridas" según la dieta del usuario.' : 'Devuelve "marcas_sugeridas" como array vacío.'}
-En "seguridad" escribe una frase corta del tipo: "Apto Vegano", "Kosher verificado - Sin lácteos", "Sin gluten - Sustituciones aplicadas". Máximo 5 palabras tras el guión.
+En "seguridad" escribe una frase corta: "Apto Vegano", "Kosher verificado", "Sin gluten aplicado". Máximo 5 palabras.
 Devuelve SOLO este JSON:
 ${RECIPE_JSON_SCHEMA}`;
 }

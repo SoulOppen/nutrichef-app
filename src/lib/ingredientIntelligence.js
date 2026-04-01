@@ -99,7 +99,10 @@ export function normalizeIngredientEntry(entry = {}) {
   }
 
   const name = entry.name || entry.nombre || entry.ingredient || entry.producto || entry.item || '';
-  const amount = entry.amount || entry.cantidad || entry.quantity || '';
+  const cantidad = entry.cantidad || '';
+  const unidad = entry.unidad || '';
+  // Build amount: prefer explicit field, fall back to combining cantidad+unidad, then legacy amount
+  const amount = entry.amount || (cantidad && unidad ? `${cantidad} ${unidad}` : cantidad || unidad) || entry.quantity || '';
   const substitute = entry.suggestedSubstitute || entry.sustituto_sugerido || entry.substitute || entry.sustituto || '';
   const isDislike = Boolean(entry.isDislike ?? entry.is_dislike ?? entry.es_dislike);
   const allergyAlert = Boolean(entry.allergyAlert ?? entry.alerta_alergia);
@@ -107,11 +110,16 @@ export function normalizeIngredientEntry(entry = {}) {
   return {
     ...entry,
     name,
+    cantidad,
+    unidad,
     amount,
     substitute,
     suggestedSubstitute: substitute,
     isDislike,
     allergyAlert,
+    es_seguro_kosher: Boolean(entry.es_seguro_kosher),
+    es_seguro_halal: Boolean(entry.es_seguro_halal),
+    marca_sugerida: entry.marca_sugerida || '',
   };
 }
 
