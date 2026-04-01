@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ChefHat, ChevronLeft, RefreshCw, Search, Sparkles, Zap } from 'lucide-react';
-import RecipeCard from '../components/RecipeCard.jsx';
+import { ChefHat, RefreshCw, Search, Sparkles, Zap } from 'lucide-react';
+import RecipeModal from '../components/RecipeModal.jsx';
+import FilterSelector from '../components/FilterSelector.jsx';
 import { useAppState } from '../context/appState.js';
 import {
   buildAbsoluteGuardrail,
@@ -162,27 +163,9 @@ ${RECIPE_JSON_SCHEMA}`;
           </button>
         </div>
 
-        {/* Mode chips — scrollable, secondary */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          {[
-            { mode: null, label: '🔮 Auto' },
-            { mode: 'local', label: '⚡ Local' },
-            { mode: 'literal', label: '🎯 Exacto' },
-            { mode: 'creative', label: '✨ Creativo' },
-          ].map(({ mode, label }) => (
-            <button
-              key={label}
-              onClick={() => setForcedMode(mode)}
-              className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
-                forcedMode === mode
-                  ? 'text-white border-transparent'
-                  : 'bg-white dark:bg-gray-900 border-slate-200 dark:border-gray-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
-              }`}
-              style={forcedMode === mode ? { background: 'var(--c-primary)', borderColor: 'var(--c-primary)' } : {}}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Mode selector */}
+        <div className="flex items-center gap-2">
+          <FilterSelector value={forcedMode} onChange={setForcedMode} />
         </div>
 
         {/* Dietary filter notice */}
@@ -288,18 +271,12 @@ ${RECIPE_JSON_SCHEMA}`;
         </div>
       )}
 
-      {/* Receta */}
-      {recipe && (
-        <div>
-          <button
-            onClick={() => { setRecipe(null); setSuggestions(suggestions); }}
-            className="mb-4 flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
-          >
-            <ChevronLeft size={18} /> Volver a resultados
-          </button>
-          <RecipeCard recipe={recipe} />
-        </div>
-      )}
+      {/* Receta — abre en modal/bottom sheet */}
+      <RecipeModal
+        recipe={recipe}
+        onClose={() => setRecipe(null)}
+        onRecipeChange={setRecipe}
+      />
 
       {/* Estado vacío — recetas rápidas populares sin búsqueda */}
       {!loading && !suggestions && !recipe && !generatingRecipe && (

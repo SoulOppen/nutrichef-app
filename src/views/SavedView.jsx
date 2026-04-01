@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Bookmark, Bot, ChevronRight, Clock, Heart, Settings2 } from 'lucide-react';
-import RecipeCard from '../components/RecipeCard.jsx';
+import { Bookmark, Bot, Clock, Heart, Settings2 } from 'lucide-react';
+import RecipeModal from '../components/RecipeModal.jsx';
 import { useAppState } from '../context/appState.js';
 
 function RecipeCard_Mini({ rec, onSelect }) {
@@ -57,26 +57,6 @@ export default function SavedView() {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [tab, setTab] = useState('favorites');
 
-  // Cuando se refina una receta desde SavedView, actualizar la seleccionada
-  const handleRecipeChange = (refined) => {
-    setSelectedRecipe(refined);
-  };
-
-  if (selectedRecipe) {
-    return (
-      <div className="max-w-6xl mx-auto">
-        <button
-          onClick={() => setSelectedRecipe(null)}
-          className="mb-4 font-medium flex items-center gap-1 hover:underline text-sm"
-          style={{ color: 'var(--c-primary)' }}
-        >
-          <ChevronRight className="rotate-180" size={16} /> Volver a Guardados
-        </button>
-        <RecipeCard recipe={selectedRecipe} onRecipeChange={handleRecipeChange} />
-      </div>
-    );
-  }
-
   const counts = {
     favorites: favoriteRecipes.length,
     interested: interestedRecipes.length,
@@ -85,6 +65,13 @@ export default function SavedView() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* Recipe modal — opens on top of the list */}
+      <RecipeModal
+        recipe={selectedRecipe}
+        onClose={() => setSelectedRecipe(null)}
+        onRecipeChange={setSelectedRecipe}
+      />
+
       <h1 className="text-2xl font-black text-slate-800 dark:text-white">Mis Recetas</h1>
 
       {/* Tabs */}

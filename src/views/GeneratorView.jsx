@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Apple, Camera, ChefHat, ChevronRight, Flame, PiggyBank, RefreshCw, Sparkles } from 'lucide-react';
-import RecipeCard from '../components/RecipeCard.jsx';
+import RecipeModal from '../components/RecipeModal.jsx';
 import { useAppState } from '../context/appState.js';
 import {
   buildAbsoluteGuardrail,
@@ -514,14 +514,11 @@ ${RECIPE_JSON_SCHEMA}`;
           </div>
         )}
 
-        {selectedRecipe && (
-          <div>
-            <button onClick={() => setSelectedRecipe(null)} className="mb-4 font-medium flex items-center gap-1 hover:underline" style={{ color: 'var(--c-primary)' }}>
-              <ChevronRight className="rotate-180" size={18} /> Volver a opciones
-            </button>
-            <RecipeCard recipe={selectedRecipe} onRecipeChange={setSelectedRecipe} />
-          </div>
-        )}
+        <RecipeModal
+          recipe={selectedRecipe}
+          onClose={() => setSelectedRecipe(null)}
+          onRecipeChange={setSelectedRecipe}
+        />
       </div>
     </div>
   );

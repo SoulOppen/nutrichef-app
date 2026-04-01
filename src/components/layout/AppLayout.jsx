@@ -28,10 +28,8 @@ function desktopNavClass({ isActive }) {
 }
 
 function mobileNavClass({ isActive }) {
-  return `flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-2xl flex-1 transition-all min-h-[56px] ${
-    isActive
-      ? 'text-[--c-primary] bg-[--c-primary-light]'
-      : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+  return `flex flex-col items-center justify-center gap-1 py-2 px-1 flex-1 transition-all min-h-[56px] ${
+    isActive ? '' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
   }`;
 }
 
@@ -141,8 +139,26 @@ export default function AppLayout() {
           <NavLink key={item.to} to={item.to} className={mobileNavClass}>
             {({ isActive }) => (
               <>
-                <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} style={isActive ? { color: 'var(--c-primary)' } : {}} />
-                <span className="text-[10px] font-bold leading-none tracking-tight">{item.label}</span>
+                <div
+                  className={`flex items-center justify-center rounded-2xl transition-all duration-200 ${
+                    isActive ? 'w-12 h-7' : 'w-10 h-7'
+                  }`}
+                  style={isActive ? { background: 'var(--c-primary)' } : {}}
+                >
+                  <item.icon
+                    size={20}
+                    strokeWidth={isActive ? 2.5 : 2}
+                    style={isActive ? { color: 'white' } : {}}
+                  />
+                </div>
+                <span
+                  className={`text-[10px] font-bold leading-none tracking-tight transition-colors ${
+                    isActive ? '' : ''
+                  }`}
+                  style={isActive ? { color: 'var(--c-primary)' } : {}}
+                >
+                  {item.label}
+                </span>
               </>
             )}
           </NavLink>
