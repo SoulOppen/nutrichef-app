@@ -441,7 +441,7 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
     } : recipe.macros,
   };
   const estimatedCost = estimateRecipeCost(displayRecipe.ingredients, profile?.country || 'Chile');
-  const estimatedCostLabel = estimatedCost > 0 ? formatCurrencyByCountry(estimatedCost, profile?.country || 'Chile') : 'Costo variable';
+  const estimatedCostLabel = estimatedCost > 0 ? `≈ ${formatCurrencyByCountry(estimatedCost, profile?.country || 'Chile')}` : 'Variable';
   const verifiedBrands = profile ? getVerifiedBrands(recipe, profile) : [];
   const heroImage = recipe.image || recipe.imageUrl || recipe.photo || recipe.coverImage || recipe.thumbnail || null;
   const calories = parseFloat(String(displayRecipe.macros?.calories || '0').replace(/[^\d.]/g, '')) || 0;
