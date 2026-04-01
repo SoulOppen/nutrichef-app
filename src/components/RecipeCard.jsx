@@ -541,7 +541,7 @@ export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
   return (
     <div className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500 dark:border-gray-800 dark:bg-gray-900">
       <div className="relative overflow-hidden rounded-t-3xl">
-        <div className="relative aspect-[4/3] sm:aspect-[16/7]">
+        <div className="relative aspect-[16/7] max-h-[260px]">
           {heroImage ? (
             <img src={heroImage} alt={recipe.title} className="h-full w-full object-cover" />
           ) : (

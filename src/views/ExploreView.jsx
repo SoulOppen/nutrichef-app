@@ -48,9 +48,9 @@ export default function ExploreView() {
     const intent = forcedMode && forcedMode !== 'local' ? forcedMode : detectSearchIntent(query);
     setDetectedMode(intent);
 
-    // Si el usuario forzó IA directa, saltamos la búsqueda local
+    // Si el usuario forzó IA directa, ir directo a la IA sin buscar local
     if (forcedMode === 'literal' || forcedMode === 'creative') {
-      setNoLocalResults(true);
+      await handleSearchWithAI();
       return;
     }
 
@@ -73,7 +73,7 @@ export default function ExploreView() {
   const handleSearchWithAI = async () => {
     if (!query.trim()) return;
     setNoLocalResults(false); setLoading(true);
-    const intent = detectSearchIntent(query);
+    const intent = (forcedMode && forcedMode !== 'local') ? forcedMode : detectSearchIntent(query);
     setDetectedMode(intent);
     setSourceLabel(intent === 'literal' ? 'ia-literal' : 'ia-creative');
 
