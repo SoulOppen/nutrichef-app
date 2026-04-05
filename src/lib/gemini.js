@@ -327,7 +327,7 @@ export async function fetchGeminiContent({ kind, payload }) {
   const cooldownUntil = getGeminiCooldownUntil();
   if (cooldownUntil > Date.now()) throw new Error(getCooldownMessage(cooldownUntil));
   const user = auth.currentUser;
-  if (!user) throw new Error('Debes iniciar sesion');
+  if (!user) throw new Error('Debes iniciar sesión');
   const token = await user.getIdToken();
   const response = await fetch(GEMINI_API_ENDPOINT, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
