@@ -16,8 +16,8 @@ function isRecipe(parsed) {
 export function useGeminiWithSave() {
   const { saveGeneratedRecipe } = useAppState();
 
-  const callAndSave = useCallback(async (promptText, cacheKey = null, storeCacheKey = null) => {
-    const result = await callGeminiAPI(promptText, cacheKey, storeCacheKey);
+  const callAndSave = useCallback(async (promptText, cacheKey = null, storeCacheKey = null, options = {}) => {
+    const result = await callGeminiAPI(promptText, cacheKey, storeCacheKey, options);
     if (result && isRecipe(result)) {
       await saveGeneratedRecipe(result);
     }

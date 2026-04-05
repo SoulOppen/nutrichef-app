@@ -13,6 +13,7 @@ import {
   buildSearchPrompt, detectSearchIntent,
   EXPLORE_CACHE_KEY, GENERATOR_RECIPE_CACHE_KEY,
   RECIPE_JSON_SCHEMA,
+  SEARCH_SUGGESTIONS_RESPONSE_SCHEMA,
 } from '../lib/gemini.js';
 import { withFoodPreferences } from '../lib/foodPreferences.js';
 import { searchLocalRecipes, getFeaturedRecipes, POPULAR_RECIPES } from '../lib/localRecipes.js';
@@ -97,7 +98,9 @@ export default function ExploreView() {
     });
 
     try {
-      const result = await callGeminiAPI(prompt, cacheKey, EXPLORE_CACHE_KEY);
+      const result = await callGeminiAPI(prompt, cacheKey, EXPLORE_CACHE_KEY, {
+        responseSchema: SEARCH_SUGGESTIONS_RESPONSE_SCHEMA,
+      });
       setSuggestions(result.suggestions);
     } catch (err) {
       setSuggestions([{ id: 'error', name: 'Error', type: 'Error', description: err.message }]);
@@ -122,12 +125,12 @@ export default function ExploreView() {
 
     const prompt = `${localeStr}
 Receta completa para "${sugg.name}". ${sugg.description}.
-Perfil: ${compactProfile(effectiveProfile)}.${foodPreferenceInstruction ? `\n${foodPreferenceInstruction}` : ''}${guardrailStr ? `\n${guardrailStr}` : ''}${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}
-Devuelve SOLO este JSON:
-${RECIPE_JSON_SCHEMA}`;
+Perfil: ${compactProfile(effectiveProfile)}.${foodPreferenceInstruction ? `\n${foodPreferenceInstruction}` : ''}${guardrailStr ? `\n${guardrailStr}` : ''}${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}`;
 
     try {
-      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY);
+      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY, {
+        responseSchema: RECIPE_JSON_SCHEMA,
+      });
       if (saveGeneratedRecipe) await saveGeneratedRecipe(result);
       setRecipe(result);
     } catch (err) { console.error(err); }

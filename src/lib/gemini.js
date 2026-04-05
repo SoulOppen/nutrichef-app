@@ -297,8 +297,215 @@ export function buildShoppingCostInstruction(profile = {}) {
 Devuelve precios mínimos y máximos NUMÉRICOS por ingrediente, más total semanal y ahorro estimado si aplica.`;
 }
 
-// ── Schema JSON de receta (con seguridad de ingredientes) ─────────────────────
-export const RECIPE_JSON_SCHEMA = `{"title":"...","description":"máx 15 palabras, sin explicaciones largas","prepTime":"...","cookTime":"...","cuisine":"...","servings":"...","ingredients":[{"cantidad":"...","unidad":"...","nombre":"...","isDislike":false,"allergyAlert":false,"suggestedSubstitute":"...","es_seguro_kosher":false,"es_seguro_halal":false,"marca_sugerida":""}],"steps":["..."],"macros":{"calories":"...","protein":"...","carbs":"...","fat":"...","fiber":"..."},"tips":"...","marcas_sugeridas":[{"name":"...","category":"kosher|halal|vegan|powerlifting|vegetariana","note":"..."}],"seguridad":"Apto [Dieta] - [motivo corto en 5 palabras max]"}`;
+// ── Structured Outputs schemas (OpenAPI subset) ───────────────────────────────
+export const Type = Object.freeze({
+  OBJECT: 'OBJECT',
+  STRING: 'STRING',
+  ARRAY: 'ARRAY',
+  BOOLEAN: 'BOOLEAN',
+  INTEGER: 'INTEGER',
+  NUMBER: 'NUMBER',
+});
+
+function stringSchema(description, extra = {}) {
+  return { type: Type.STRING, description, ...extra };
+}
+
+function booleanSchema(description, extra = {}) {
+  return { type: Type.BOOLEAN, description, ...extra };
+}
+
+function integerSchema(description, extra = {}) {
+  return { type: Type.INTEGER, description, ...extra };
+}
+
+function numberSchema(description, extra = {}) {
+  return { type: Type.NUMBER, description, ...extra };
+}
+
+function arraySchema(items, description, extra = {}) {
+  return { type: Type.ARRAY, items, description, ...extra };
+}
+
+const RECIPE_INGREDIENT_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Ingrediente normalizado de la receta.',
+  properties: {
+    cantidad: stringSchema('Cantidad del ingrediente.'),
+    unidad: stringSchema('Unidad del ingrediente.'),
+    nombre: stringSchema('Nombre del ingrediente, sin certificaciones ni texto extra.'),
+    isDislike: booleanSchema('Marca si el ingrediente coincide con un dislike del usuario.'),
+    allergyAlert: booleanSchema('Marca si el ingrediente entra en conflicto con alergias o intolerancias.'),
+    suggestedSubstitute: stringSchema('Sustituto sugerido cuando el ingrediente es conflictivo.'),
+    es_seguro_kosher: booleanSchema('Indica si el ingrediente es seguro para dieta Kosher.'),
+    es_seguro_halal: booleanSchema('Indica si el ingrediente es seguro para dieta Halal.'),
+    marca_sugerida: stringSchema('Marca sugerida compatible si aplica.'),
+  },
+  required: ['cantidad', 'unidad', 'nombre', 'isDislike', 'allergyAlert', 'suggestedSubstitute', 'es_seguro_kosher', 'es_seguro_halal', 'marca_sugerida'],
+};
+
+const RECIPE_MACROS_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Resumen de macros nutricionales.',
+  properties: {
+    calories: stringSchema('Calorias estimadas.'),
+    protein: stringSchema('Proteina estimada.'),
+    carbs: stringSchema('Carbohidratos estimados.'),
+    fat: stringSchema('Grasas estimadas.'),
+    fiber: stringSchema('Fibra estimada.'),
+  },
+  required: ['calories', 'protein', 'carbs', 'fat', 'fiber'],
+};
+
+const RECIPE_BRAND_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Marca sugerida compatible con la dieta del usuario.',
+  properties: {
+    name: stringSchema('Nombre de la marca.'),
+    category: stringSchema('Categoria dietaria asociada.', {
+      enum: ['kosher', 'halal', 'vegan', 'powerlifting', 'vegetariana'],
+    }),
+    note: stringSchema('Nota corta explicando la relevancia de la marca.'),
+  },
+  required: ['name', 'category', 'note'],
+};
+
+export const RECIPE_JSON_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Receta completa normalizada para NutriChef.',
+  properties: {
+    title: stringSchema('Nombre de la receta.'),
+    description: stringSchema('Descripcion breve de maximo 15 palabras.'),
+    prepTime: stringSchema('Tiempo de preparacion.'),
+    cookTime: stringSchema('Tiempo de coccion.'),
+    cuisine: stringSchema('Tipo de cocina.'),
+    servings: stringSchema('Cantidad de porciones.'),
+    ingredients: arraySchema(RECIPE_INGREDIENT_SCHEMA, 'Ingredientes de la receta.'),
+    steps: arraySchema(stringSchema('Paso de la receta.'), 'Pasos de la receta.'),
+    macros: RECIPE_MACROS_SCHEMA,
+    tips: stringSchema('Consejo breve de cocina.'),
+    marcas_sugeridas: arraySchema(RECIPE_BRAND_SCHEMA, 'Marcas sugeridas segun la dieta del usuario.'),
+    seguridad: stringSchema('Resumen corto de seguridad alimentaria para la dieta del usuario.'),
+  },
+  required: ['title', 'description', 'prepTime', 'cookTime', 'cuisine', 'servings', 'ingredients', 'steps', 'macros', 'tips', 'marcas_sugeridas', 'seguridad'],
+};
+
+export const RECIPE_REFINEMENT_SCHEMA = RECIPE_JSON_SCHEMA;
+
+const SEARCH_SUGGESTION_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Sugerencia breve de plato o receta.',
+  properties: {
+    id: integerSchema('Identificador numerico de la sugerencia.'),
+    name: stringSchema('Nombre de la sugerencia.'),
+    type: stringSchema('Tipo o metodo principal del plato.'),
+    description: stringSchema('Descripcion breve y directa de la sugerencia.'),
+  },
+  required: ['id', 'name', 'type', 'description'],
+};
+
+export const SEARCH_SUGGESTIONS_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Conjunto de sugerencias de recetas o platos.',
+  properties: {
+    suggestions: arraySchema(SEARCH_SUGGESTION_SCHEMA, 'Sugerencias generadas por Gemini.'),
+  },
+  required: ['suggestions'],
+};
+
+const MEAL_OPTION_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Opcion de comida dentro de un plan.',
+  properties: {
+    name: stringSchema('Nombre de la opcion de comida.'),
+    description: stringSchema('Descripcion breve y practica.'),
+    calories: stringSchema('Calorias estimadas de la opcion.'),
+    protein: stringSchema('Proteina estimada de la opcion.'),
+    fiber: stringSchema('Fibra estimada de la opcion.'),
+    servings: integerSchema('Cantidad de porciones.'),
+  },
+  required: ['name', 'description', 'calories', 'protein', 'fiber', 'servings'],
+};
+
+const MEAL_GROUP_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Grupo de comida por horario o categoria.',
+  properties: {
+    type: stringSchema('Tipo de comida, por ejemplo Desayuno o Almuerzo.'),
+    options: arraySchema(MEAL_OPTION_SCHEMA, 'Opciones disponibles para este tipo de comida.'),
+  },
+  required: ['type', 'options'],
+};
+
+const MEAL_PLAN_DAY_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Dia individual dentro del plan de comidas.',
+  properties: {
+    dayName: stringSchema('Nombre del dia.'),
+    meals: arraySchema(MEAL_GROUP_SCHEMA, 'Comidas del dia.'),
+  },
+  required: ['dayName', 'meals'],
+};
+
+export const MEAL_PLAN_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Plan de comidas diario o semanal.',
+  properties: {
+    summary: stringSchema('Resumen general del plan.'),
+    totalCalories: stringSchema('Calorias totales estimadas.'),
+    totalProtein: stringSchema('Proteina total estimada.'),
+    totalFiber: stringSchema('Fibra total estimada.'),
+    days: arraySchema(MEAL_PLAN_DAY_SCHEMA, 'Dias del plan de comidas.'),
+  },
+  required: ['summary', 'totalCalories', 'totalProtein', 'totalFiber', 'days'],
+};
+
+export const MEAL_OPTIONS_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Respuesta con opciones de reemplazo para una comida.',
+  properties: {
+    options: arraySchema(MEAL_OPTION_SCHEMA, 'Opciones alternativas para reemplazar una comida.'),
+  },
+  required: ['options'],
+};
+
+const SHOPPING_LIST_ITEM_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Ingrediente o item de compra.',
+  properties: {
+    name: stringSchema('Nombre del ingrediente o producto.'),
+    amount: stringSchema('Cantidad total aproximada a comprar.'),
+    estimatedPriceMin: numberSchema('Precio minimo estimado.'),
+    estimatedPriceMax: numberSchema('Precio maximo estimado.'),
+    budgetTip: stringSchema('Consejo breve de ahorro.'),
+    substituteFor: stringSchema('Ingrediente original sustituido, si hubo cambio por seguridad.'),
+  },
+  required: ['name', 'amount', 'estimatedPriceMin', 'estimatedPriceMax', 'budgetTip', 'substituteFor'],
+};
+
+const SHOPPING_LIST_CATEGORY_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Categoria de supermercado para agrupar compras.',
+  properties: {
+    name: stringSchema('Nombre de la categoria.'),
+    items: arraySchema(SHOPPING_LIST_ITEM_SCHEMA, 'Items agrupados en esta categoria.'),
+  },
+  required: ['name', 'items'],
+};
+
+export const SHOPPING_LIST_RESPONSE_SCHEMA = {
+  type: Type.OBJECT,
+  description: 'Lista de compras consolidada para un plan.',
+  properties: {
+    currency: stringSchema('Codigo de moneda.'),
+    estimatedTotalMin: numberSchema('Costo minimo total estimado.'),
+    estimatedTotalMax: numberSchema('Costo maximo total estimado.'),
+    estimatedSavingsMin: numberSchema('Ahorro minimo estimado.'),
+    estimatedSavingsMax: numberSchema('Ahorro maximo estimado.'),
+    categories: arraySchema(SHOPPING_LIST_CATEGORY_SCHEMA, 'Categorias y productos de la lista de compras.'),
+  },
+  required: ['currency', 'estimatedTotalMin', 'estimatedTotalMax', 'estimatedSavingsMin', 'estimatedSavingsMax', 'categories'],
+};
 
 // ── Builder de prompt de receta con marcas ───────────────────────────────────
 export function buildRecipePrompt({ name, description, ingredients, profileStr, profile }) {
@@ -318,9 +525,7 @@ REGLAS ESTRICTAS DE FORMATO — INCUMPLIRLAS INVALIDA LA RESPUESTA:
 6. Los pasos tienen máximo 12 palabras cada uno.
 7. Marca ingredientes problemáticos con "isDislike":true o "allergyAlert":true y añade "suggestedSubstitute".
 ${needsBrands ? 'Incluye marcas relevantes en "marcas_sugeridas" según la dieta del usuario.' : 'Devuelve "marcas_sugeridas" como array vacío.'}
-En "seguridad" escribe una frase corta: "Apto Vegano", "Kosher verificado", "Sin gluten aplicado". Máximo 5 palabras.
-Devuelve SOLO este JSON:
-${RECIPE_JSON_SCHEMA}`;
+En "seguridad" escribe una frase corta: "Apto Vegano", "Kosher verificado", "Sin gluten aplicado". Máximo 5 palabras.`;
 }
 
 // ── Fetch backend ─────────────────────────────────────────────────────────────
@@ -343,17 +548,65 @@ export async function fetchGeminiContent({ kind, payload }) {
   return data;
 }
 
-function extractJSON(text) {
-  const clean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-  const start = clean.indexOf('{');
-  const end = clean.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) throw new Error('La IA no devolvio un JSON valido');
-  return clean.slice(start, end + 1);
+function normalizeCallGeminiOptions(options = {}) {
+  if (typeof options === 'number') {
+    return { maxOutputTokens: options };
+  }
+
+  return options || {};
 }
 
-export async function callGeminiAPI(promptText, cacheKeyOrEntryKey = null, storeCacheKey = null) {
+function normalizeGeminiResponse(parsed, responseSchema) {
+  if (responseSchema === RECIPE_JSON_SCHEMA || responseSchema === RECIPE_REFINEMENT_SCHEMA) {
+    return normalizeRecipePayload(parsed);
+  }
+
+  return parsed;
+}
+
+function inferResponseSchema(promptText, entryKey, storeCacheKey) {
+  if (storeCacheKey === GENERATOR_RECIPE_CACHE_KEY || (!storeCacheKey && entryKey)) {
+    return RECIPE_JSON_SCHEMA;
+  }
+
+  if (storeCacheKey === EXPLORE_CACHE_KEY) {
+    return SEARCH_SUGGESTIONS_RESPONSE_SCHEMA;
+  }
+
+  if (storeCacheKey === MEALPLAN_CACHE_KEY) {
+    return MEAL_PLAN_RESPONSE_SCHEMA;
+  }
+
+  if (storeCacheKey === SHOPPING_CACHE_KEY) {
+    return SHOPPING_LIST_RESPONSE_SCHEMA;
+  }
+
+  const text = String(promptText || '');
+
+  if (text.startsWith('Reemplaza "')) {
+    return MEAL_OPTIONS_RESPONSE_SCHEMA;
+  }
+
+  if (
+    text.includes('El usuario busca EXACTAMENTE:') ||
+    text.includes('Genera 3 opciones adaptadas a su perfil:') ||
+    text.includes('Eres un chef IA. Genera 3 opciones')
+  ) {
+    return SEARCH_SUGGESTIONS_RESPONSE_SCHEMA;
+  }
+
+  if (text.startsWith('Receta completa')) {
+    return RECIPE_JSON_SCHEMA;
+  }
+
+  return null;
+}
+
+export async function callGeminiAPI(promptText, cacheKeyOrEntryKey = null, storeCacheKey = null, options = {}) {
   const useNewMode = storeCacheKey !== null;
   const entryKey = cacheKeyOrEntryKey;
+  const { responseSchema = null, temperature = 0.7, maxOutputTokens = null } = normalizeCallGeminiOptions(options);
+  const resolvedResponseSchema = responseSchema || inferResponseSchema(promptText, entryKey, storeCacheKey);
 
   if (useNewMode && entryKey) {
     const cached = getCacheEntry(storeCacheKey, entryKey);
@@ -365,7 +618,12 @@ export async function callGeminiAPI(promptText, cacheKeyOrEntryKey = null, store
 
   const payload = {
     contents: [{ role: 'user', parts: [{ text: promptText }] }],
-    generationConfig: { temperature: 0.7, responseMimeType: 'application/json' }
+    generationConfig: {
+      temperature,
+      responseMimeType: 'application/json',
+      ...(resolvedResponseSchema ? { responseSchema: resolvedResponseSchema } : {}),
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+    }
   };
 
   try {
@@ -373,7 +631,7 @@ export async function callGeminiAPI(promptText, cacheKeyOrEntryKey = null, store
     const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textResult) throw new Error('La IA no devolvio texto');
     let parsed;
-    try { parsed = normalizeRecipePayload(JSON.parse(extractJSON(textResult))); }
+    try { parsed = normalizeGeminiResponse(JSON.parse(textResult), resolvedResponseSchema); }
     catch { console.error('Respuesta cruda:', textResult); throw new Error('JSON malformado - intenta de nuevo'); }
     if (useNewMode && entryKey) setCacheEntry(storeCacheKey, entryKey, parsed);
     else if (!useNewMode && entryKey) { const c = getRecipeCache(); c[entryKey] = parsed; setRecipeCache(c); }
@@ -601,15 +859,12 @@ export function buildSearchPrompt({ query, mode, profileStr, localeStr, supermar
     return `${localeStr}
 El usuario busca EXACTAMENTE: "${query}".
 Perfil: ${profileStr}.${favPart}${foodPreferencePart}${guardrailPart}${superPart}${brandPart}${pesachPart}
-MODO LITERAL: Devuelve SOLO la receta exacta pedida. NO añadas acompañamientos ni menús completos.
-Devuelve SOLO este JSON con 1 resultado:
-{"suggestions":[{"id":1,"name":"[nombre exacto]","type":"[método]","description":"Receta exacta sin variaciones"}]}`;
+MODO LITERAL: Devuelve SOLO la receta exacta pedida. NO añadas acompañamientos ni menús completos. Genera una sola sugerencia exacta y sin variaciones.`;
   }
 
   return `${localeStr}
 El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${foodPreferencePart}${guardrailPart}${superPart}${brandPart}${pesachPart}
-Devuelve SOLO este JSON:
-{"suggestions":[{"id":1,"name":"...","type":"...","description":"..."},{"id":2,"name":"...","type":"...","description":"..."},{"id":3,"name":"...","type":"...","description":"..."}]}`;
+Cada sugerencia debe incluir nombre, tipo y una descripción breve y directa.`;
 }
 
 function normalizeRecipeField(nextValue, fallbackValue) {
@@ -678,27 +933,11 @@ export async function refineRecipe(recipe, instruction, profile = {}) {
   const foodPreferenceInstruction = buildFoodPreferencePromptBlock(profile);
   const guardrailInstruction = buildAbsoluteGuardrail(profile);
 
-  const refinementSchema = `{
-  "title": "Nombre del plato",
-  "description": "Descripción breve apetitosa",
-  "prepTime": "XX min",
-  "cookTime": "XX min",
-  "cuisine": "Tipo de cocina",
-  "servings": "X porciones",
-  "ingredients": [{ "name": "ingrediente", "amount": "cantidad", "substitute": "sustituto opcional", "suggestedSubstitute": "sustituto recomendado", "isDislike": false, "allergyAlert": false }],
-  "steps": ["Paso 1...", "Paso 2..."],
-  "macros": { "calories": "aprox kcal", "protein": "Xg", "carbs": "Xg", "fat": "Xg", "fiber": "Xg" },
-  "tips": "Consejo de cocina",
-  "marcas_sugeridas": [{ "name": "marca", "category": "kosher|halal|vegan|powerlifting|vegetariana", "note": "motivo breve" }]
-}`;
-
   const promptText = `Ajusta la siguiente receta según la instrucción del usuario.
 Mantén el mismo idioma de la receta original.
 Si el usuario pide quitar o reemplazar ingredientes, actualiza ingredientes, pasos, tiempos y macros para que sean coherentes.
 Si detectas ingredientes de la receta que coinciden con alergias o dislikes del usuario, márcalos y devuelve un sustituto inmediato.
 ${foodPreferenceInstruction ? `${foodPreferenceInstruction}\n` : ''}${guardrailInstruction ? `${guardrailInstruction}\n` : ''}Perfil activo: ${compactProfile(profile) || 'Sin preferencias adicionales'}.
-Devuelve SOLO un JSON válido con este esquema:
-${refinementSchema}
 
 RECETA ACTUAL:
 ${JSON.stringify(recipe, null, 2)}
@@ -708,7 +947,11 @@ ${instruction}`;
 
   const payload = {
     contents: [{ role: 'user', parts: [{ text: promptText }] }],
-    generationConfig: { temperature: 0.25, responseMimeType: 'application/json' }
+    generationConfig: {
+      temperature: 0.25,
+      responseMimeType: 'application/json',
+      responseSchema: RECIPE_REFINEMENT_SCHEMA,
+    }
   };
 
   const data = await fetchGeminiContent({ kind: 'text', payload });
@@ -717,7 +960,7 @@ ${instruction}`;
 
   let parsed;
   try {
-    parsed = normalizeRecipePayload(JSON.parse(extractJSON(textResult)));
+    parsed = normalizeRecipePayload(JSON.parse(textResult));
   } catch {
     console.error('Respuesta cruda al refinar receta:', textResult);
     throw new Error('La IA devolvio un ajuste invalido. Intenta de nuevo.');

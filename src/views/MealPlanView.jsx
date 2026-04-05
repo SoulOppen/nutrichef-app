@@ -27,7 +27,10 @@ import {
   MEALPLAN_CACHE_KEY,
   SHOPPING_CACHE_KEY,
   GENERATOR_RECIPE_CACHE_KEY,
+  MEAL_OPTIONS_RESPONSE_SCHEMA,
+  MEAL_PLAN_RESPONSE_SCHEMA,
   RECIPE_JSON_SCHEMA,
+  SHOPPING_LIST_RESPONSE_SCHEMA,
   readStoredJson,
   writeStoredJson,
 } from '../lib/gemini.js';
@@ -163,11 +166,13 @@ ${budgetStr}
 ${shoppingCostStr}
 Agrupa por categoría de supermercado y suma cantidades totales aproximadas considerando las porciones indicadas.
 Si un ingrediente entra en alergias o dislikes del usuario, reemplázalo automáticamente por su sustituto seguro y NO devuelvas el original en la lista final.
-Devuelve SOLO este JSON:
-{"currency":"...","estimatedTotalMin":0,"estimatedTotalMax":0,"estimatedSavingsMin":0,"estimatedSavingsMax":0,"categories":[{"name":"...","items":[{"name":"...","amount":"...","estimatedPriceMin":0,"estimatedPriceMax":0,"budgetTip":"...","substituteFor":"ingrediente original si hubo reemplazo"}]}]}`;
+`;
 
     try {
-      const result = await callGeminiAPI(prompt, shoppingCacheKey, SHOPPING_CACHE_KEY, 600);
+      const result = await callGeminiAPI(prompt, shoppingCacheKey, SHOPPING_CACHE_KEY, {
+        responseSchema: SHOPPING_LIST_RESPONSE_SCHEMA,
+        maxOutputTokens: 600,
+      });
       setShoppingList(result);
     } catch (err) {
       console.error(err);
@@ -201,8 +206,7 @@ ${guardrailStr}
 ${budgetStr}
 ${isWeekly ? 'No repetir el mismo menu exacto los 7 dias. Ofrece 2 opciones distintas por tipo de comida en cada dia.' : 'Ofrece 3 opciones distintas por tipo de comida.'}
 Las descripciones de opciones de comida deben ser cortas (8-12 palabras), directas y sin frases vacías.
-Devuelve SOLO este JSON:
-{"summary":"...","totalCalories":"...","totalProtein":"...","totalFiber":"...","days":[{"dayName":"${targetDayName}","meals":[{"type":"Desayuno","options":[{"name":"...","description":"...","calories":"...","protein":"...","fiber":"...","servings":1}]}]}]}`;
+`;
 
     try {
       const result = normalizePlanServings(await callGeminiAPI(
@@ -243,11 +247,13 @@ Devuelve SOLO este JSON:
 Petición: "${customSwapRequest}". Perfil: ${profileStr}.
 ${guardrailStr}
 ${budgetStr}
-Devuelve SOLO este JSON:
-{"options":[{"name":"...","description":"...","calories":"...","protein":"...","fiber":"...","servings":1}]}`;
+`;
 
     try {
-      const result = await callGeminiAPI(prompt, null, null, 200);
+      const result = await callGeminiAPI(prompt, null, null, {
+        responseSchema: MEAL_OPTIONS_RESPONSE_SCHEMA,
+        maxOutputTokens: 200,
+      });
       const newPlan = normalizePlanServings({ ...plan });
       newPlan.days[dayIdx].meals[mealIdx].options = result.options?.map(option => normalizeMealOption(option)) || [];
       setPlan(newPlan);
@@ -297,12 +303,13 @@ Devuelve SOLO este JSON:
 
     const prompt = `Receta completa para "${option.name}". ${option.description}. Perfil: ${profileStr}. Cal objetivo: ${option.calories}, Prot: ${option.protein}. Debe rendir para ${selectedServings} porciones.
 ${guardrailStr}
-${budgetStr}
-Devuelve SOLO este JSON:
-${RECIPE_JSON_SCHEMA}`;
+${budgetStr}`;
 
     try {
-      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY, 900);
+      const result = await callGeminiAPI(prompt, cacheKey, GENERATOR_RECIPE_CACHE_KEY, {
+        responseSchema: RECIPE_JSON_SCHEMA,
+        maxOutputTokens: 900,
+      });
       setSelectedRecipe({ ...result, servings: result.servings || `${selectedServings} porciones` });
     } catch (err) {
       console.error(err);

@@ -46,6 +46,7 @@ export default function OnboardingView() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [otherAllergyInput, setOtherAllergyInput] = useState('');
+  const [medicalDisclaimerAccepted, setMedicalDisclaimerAccepted] = useState(Boolean(profile.medicalDisclaimerAccepted));
 
   const currentStep = STEPS[step];
   const progress = (step / (STEPS.length - 1)) * 100;
@@ -66,16 +67,21 @@ export default function OnboardingView() {
   };
 
   const finish = () => {
+    if (!medicalDisclaimerAccepted) return;
+
+    const acceptedAt = new Date().toISOString();
     const macros = calculateTDEE(profile);
-    if (macros && !profile.manualCalories) {
-      setProfile(current => ({
-        ...current,
+    setProfile(current => ({
+      ...current,
+      ...(macros && !current.manualCalories ? {
         dailyCalories: macros.calories.toString(),
         proteinTarget: macros.protein.toString(),
         fiberTarget: macros.fiber.toString(),
         carbTarget: macros.carbs.toString(),
-      }));
-    }
+      } : {}),
+      medicalDisclaimerAccepted: true,
+      acceptedAt,
+    }));
     navigate(ROUTES.create);
   };
 
@@ -428,6 +434,20 @@ export default function OnboardingView() {
         <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-gray-800 dark:bg-gray-900">
           {renderStep()}
 
+          {step === STEPS.length - 1 && (
+            <label className="mt-8 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left dark:border-amber-800 dark:bg-amber-900/20">
+              <input
+                type="checkbox"
+                checked={medicalDisclaimerAccepted}
+                onChange={e => setMedicalDisclaimerAccepted(e.target.checked)}
+                className="mt-1 h-4 w-4 shrink-0 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-sm leading-relaxed text-amber-900 dark:text-amber-200">
+                Entiendo que NutriChef es una herramienta de asistencia y sugerencias nutricionales basadas en IA. No constituye un diagnóstico, tratamiento ni reemplaza la evaluación formal presencial de un profesional de la salud. Asumo la responsabilidad sobre las decisiones dietéticas que tome basándome en esta app.
+              </span>
+            </label>
+          )}
+
           <div className="mt-8 flex gap-3">
             {step > 0 && step < STEPS.length - 1 && (
               <button onClick={prev} className="rounded-2xl border-2 border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 transition-colors hover:border-slate-400 dark:border-gray-700 dark:text-slate-300">
@@ -440,7 +460,12 @@ export default function OnboardingView() {
                 <span className="flex items-center justify-center gap-2">{step === 0 ? 'Comenzar' : 'Siguiente'} <ChevronRight size={16} /></span>
               </button>
             ) : (
-              <button onClick={finish} className="flex-1 rounded-2xl py-3 text-sm font-bold text-white transition-all" style={{ background: 'var(--c-primary)' }}>
+              <button
+                onClick={finish}
+                disabled={!medicalDisclaimerAccepted}
+                className="flex-1 rounded-2xl py-3 text-sm font-bold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ background: 'var(--c-primary)' }}
+              >
                 Empezar a cocinar
               </button>
             )}

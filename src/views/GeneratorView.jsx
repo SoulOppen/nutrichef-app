@@ -21,6 +21,7 @@ import {
   getCooldownMessage,
   getGeminiCooldownUntil,
   RECIPE_JSON_SCHEMA,
+  SEARCH_SUGGESTIONS_RESPONSE_SCHEMA,
   TIME_OPTIONS,
   readStoredJson,
   writeStoredJson,
@@ -219,12 +220,12 @@ ${timeStr}
 ${superStr}
 ${brandStr}
 ${budgetStr}
-${complexity.promptInstructions}
-Devuelve SOLO este JSON:
-{"suggestions":[{"id":1,"name":"...","type":"...","description":"..."}]}`;
+${complexity.promptInstructions}`;
 
     try {
-      const result = await callGeminiAPI(prompt);
+      const result = await callGeminiAPI(prompt, null, null, {
+        responseSchema: SEARCH_SUGGESTIONS_RESPONSE_SCHEMA,
+      });
       setSuggestions(result.suggestions);
       suggestionsCache[suggestionsCacheKey] = result.suggestions;
       writeStoredJson(GENERATOR_SUGGESTIONS_CACHE_KEY, suggestionsCache);
@@ -270,12 +271,12 @@ ${timeStr2}
 ${superStr2}
 ${brandStr2}
 ${budgetStr2}
-${complexity.promptInstructions}
-Devuelve SOLO este JSON:
-${RECIPE_JSON_SCHEMA}`;
+${complexity.promptInstructions}`;
 
     try {
-      const result = await callGeminiAPI(prompt, recipeCacheKey);
+      const result = await callGeminiAPI(prompt, recipeCacheKey, null, {
+        responseSchema: RECIPE_JSON_SCHEMA,
+      });
       setSelectedRecipe(result);
     } catch (err) {
       if (err.message?.includes('limite de solicitudes') || err.message?.includes('Gemini esta en pausa')) {
