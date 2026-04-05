@@ -37,18 +37,25 @@ function ChipGroup({ label, options, value, onChange }) {
 
 // ── Recipe option card (shown after generation) ───────────────────────────────
 
-const OPTION_LABELS = ['Rápida y simple', 'Mejor nutrición', 'Alternativa creativa'];
+const LABEL_CONFIG = {
+  'rápida':      { icon: '⚡', text: 'Rápida y simple' },
+  'balanceada':  { icon: '⚖️', text: 'Mejor nutrición' },
+  'alternativa': { icon: '🔄', text: 'Alternativa creativa' },
+};
+const FALLBACK_LABELS = ['Rápida y simple', 'Mejor nutrición', 'Alternativa creativa'];
 
 function RecipeOptionCard({ recipe, index, onSelect }) {
+  const labelCfg = LABEL_CONFIG[recipe._label] ?? { icon: '•', text: FALLBACK_LABELS[index] ?? `Opción ${index + 1}` };
+
   return (
     <button
       type="button"
       onClick={() => onSelect(recipe)}
-      className="w-full text-left p-4 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 hover:border-[--c-primary-border] active:scale-[0.98] transition-all group"
+      className="w-full text-left p-4 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 hover:border-[--c-primary-border] active:scale-[0.98] transition-all"
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-          {OPTION_LABELS[index] ?? `Opción ${index + 1}`}
+          {labelCfg.icon} {labelCfg.text}
         </span>
         <div className="flex items-center gap-1 shrink-0">
           {recipe._time_minutes && (
@@ -199,11 +206,23 @@ const OBJETIVO_PREP_OPTIONS = [
   { value: 'equilibrada y variada', label: '⚖️ Equilibrada' },
 ];
 
+const TIPO_OPTIONS = [
+  { value: null, label: '✨ Cualquiera', optional: true },
+  { value: 'proteico', label: '💪 Proteico' },
+  { value: 'liviano', label: '🥗 Liviano' },
+  { value: 'comida completa', label: '🍽️ Completa' },
+  { value: 'antojo dulce', label: '🍫 Dulce' },
+  { value: 'snack', label: '🍎 Snack' },
+];
+
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function CookingHome() {
   const [activeCard, setActiveCard] = useState('cookNow');
   const [viewingRecipe, setViewingRecipe] = useState(null);
+
+  // Global intention — shared across all 3 cards
+  const [tipo, setTipo] = useState(null);
 
   // cookNow params
   const [tiempo, setTiempo] = useState('rápido (menos de 20 min)');
@@ -219,10 +238,10 @@ export default function CookingHome() {
 
   const { generate, getOptions, isLoading, getError } = useCooking();
 
-  // Current params objects
-  const cookNowParams = { tiempo, dificultad, objetivo: objetivoCook };
-  const ingredientsParams = { ingredientes: ingredientes.trim() };
-  const mealPrepParams = { dias, objetivo: objetivoPrep };
+  // Current params objects — tipo is included in all so cache keys reflect it
+  const cookNowParams = { tiempo, dificultad, objetivo: objetivoCook, tipo };
+  const ingredientsParams = { ingredientes: ingredientes.trim(), tipo };
+  const mealPrepParams = { dias, objetivo: objetivoPrep, tipo };
 
   const toggle = (id) => setActiveCard(prev => (prev === id ? null : id));
 
@@ -238,11 +257,38 @@ export default function CookingHome() {
   return (
     <div className="max-w-lg mx-auto space-y-4">
       {/* Page header */}
-      <div className="pt-1 pb-1">
+      <div className="pt-1">
         <h1 className="text-2xl font-black text-slate-800 dark:text-white">¿Qué cocinamos?</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           Elige cómo quieres empezar — te doy 3 opciones.
         </p>
+      </div>
+
+      {/* Tipo de comida — global intention selector */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-slate-100 dark:border-gray-800 px-4 py-3.5">
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2.5">
+          ¿Qué te apetece?
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {TIPO_OPTIONS.map(opt => {
+            const isSelected = tipo === opt.value;
+            return (
+              <button
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setTipo(isSelected && opt.optional ? null : opt.value)}
+                className={`px-3 py-1.5 rounded-xl text-sm font-bold transition-all active:scale-95 border ${
+                  isSelected
+                    ? 'text-white border-transparent'
+                    : 'bg-slate-50 dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-gray-600'
+                }`}
+                style={isSelected ? { background: 'var(--c-primary)', borderColor: 'var(--c-primary)' } : {}}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Card 1: Cocinar ahora ── */}

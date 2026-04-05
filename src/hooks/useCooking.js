@@ -59,7 +59,8 @@ function normalizeCookingRecipe(r) {
     },
     tips: `Dificultad: ${r.difficulty || 'fácil'}`,
     marcas_sugeridas: [],
-    // Extra fields for option cards
+    // Extra fields used by RecipeOptionCard
+    _label: r.label || null,       // "rápida" | "balanceada" | "alternativa"
     _difficulty: r.difficulty || 'fácil',
     _time_minutes: r.time_minutes ?? null,
     _tags: r.tags || [],
@@ -79,6 +80,7 @@ function extractJSON(text) {
 
 function buildPrompt(mode, params, { profileStr, locale, guardrail, superStr }) {
   const preferences = [profileStr, guardrail, superStr].filter(Boolean).join('\n');
+  const tipoLine = params.tipo ? `\nTipo de comida deseada (intención): ${params.tipo}` : '';
 
   let modeLabel, inputsBlock;
 
@@ -96,35 +98,39 @@ function buildPrompt(mode, params, { profileStr, locale, guardrail, superStr }) 
   }
 
   return `${locale}
-Actúa como un chef experto en cocina saludable.
+Actúa como un chef experto en cocina saludable, práctica y realista.
 
-Tu tarea es generar EXACTAMENTE 3 recetas distintas basadas en los siguientes criterios.
+Tu tarea es generar EXACTAMENTE 3 recetas distintas basadas en el contexto del usuario.
 
 ## CONTEXTO DEL USUARIO
 
-- Preferencias alimenticias: ${preferences}
-- Modo: ${modeLabel}
-- Inputs:
-${inputsBlock}
+Preferencias alimenticias:
+${preferences}
+
+Modo: ${modeLabel}
+
+Inputs del usuario:
+${inputsBlock}${tipoLine}
 
 ## LÓGICA DE LAS 3 OPCIONES
 
-1. Opción 1 → rápida y simple
-2. Opción 2 → balanceada (mejor nutrición)
-3. Opción 3 → alternativa (más creativa o distinta)
+1. Opción 1 → ⚡ Rápida y simple (label: "rápida")
+2. Opción 2 → ⚖️ Balanceada — mejor nutrición (label: "balanceada")
+3. Opción 3 → 🔄 Alternativa — distinta / creativa (label: "alternativa")
 
-## REGLAS
+## RESTRICCIONES
 
-- EXACTAMENTE 3 recetas (ni más ni menos)
-- Ingredientes principales distintos en cada opción
+- EXACTAMENTE 3 recetas
+- No repetir la misma base en las 3 opciones
 - Máx 6–8 ingredientes por receta
 - Máx 5–6 pasos por receta
 - Respetar SIEMPRE las preferencias (kosher, alergias, etc.)
+- Recetas realistas — que alguien realmente cocinaría
 - SOLO JSON, sin texto adicional
 
 ## FORMATO DE RESPUESTA (JSON OBLIGATORIO)
 
-{"recipes":[{"title":"","description":"","time_minutes":0,"difficulty":"fácil","tags":["tag1"],"nutrition":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[{"name":"","amount":""}],"steps":["Paso 1"]}]}`;
+{"recipes":[{"title":"","description":"","label":"rápida","time_minutes":0,"difficulty":"fácil","tags":["tag1"],"nutrition":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[{"name":"","amount":""}],"steps":["Paso 1"]}]}`;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
