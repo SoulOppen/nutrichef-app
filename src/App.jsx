@@ -79,8 +79,6 @@ function AppRoutes() {
         <Suspense fallback={<RouteLoadingScreen />}>
           <Routes>
             <Route path={ROUTES.onboarding} element={<OnboardingView />} />
-
-<<<<<<< HEAD
             <Route
               path={ROUTES.home}
               element={
@@ -89,7 +87,8 @@ function AppRoutes() {
                 </OnboardingGuard>
               }
             >
-              <Route index element={<Navigate to={ROUTES.create} replace />} />
+              <Route index element={<Navigate to={ROUTES.cook} replace />} />
+              <Route path={ROUTES.cook.slice(1)} element={<CookingHome />} />
               <Route path={ROUTES.create.slice(1)} element={<GeneratorView />} />
               <Route path={ROUTES.explore.slice(1)} element={<ExploreView />} />
               <Route path={ROUTES.saved.slice(1)} element={<SavedView />} />
@@ -98,34 +97,11 @@ function AppRoutes() {
               <Route path={ROUTES.preferences.slice(1)} element={<FoodPreferencesScreen />} />
               <Route path={ROUTES.settings.slice(1)} element={<SettingsView />} />
               <Route path="add-recipe" element={<AddRecipeView />} />
-              <Route path="*" element={<Navigate to={ROUTES.create} replace />} />
+              <Route path="*" element={<Navigate to={ROUTES.cook} replace />} />
             </Route>
           </Routes>
         </Suspense>
       </FoodPreferencesProvider>
-=======
-          <Route
-            path={ROUTES.home}
-            element={
-              <OnboardingGuard>
-                <AppLayout />
-              </OnboardingGuard>
-            }
-          >
-            <Route index element={<Navigate to={ROUTES.cook} replace />} />
-            <Route path={ROUTES.cook.slice(1)} element={<CookingHome />} />
-            <Route path={ROUTES.create.slice(1)} element={<GeneratorView />} />
-            <Route path={ROUTES.explore.slice(1)} element={<ExploreView />} />
-            <Route path={ROUTES.saved.slice(1)} element={<SavedView />} />
-            <Route path={ROUTES.plan.slice(1)} element={<MealPlanView />} />
-            <Route path={ROUTES.profile.slice(1)} element={<ProfileView />} />
-            <Route path={ROUTES.settings.slice(1)} element={<SettingsView />} />
-            <Route path="add-recipe" element={<AddRecipeView />} />
-            <Route path="*" element={<Navigate to={ROUTES.cook} replace />} />
-          </Route>
-        </Routes>
-      </Suspense>
->>>>>>> f92c77910a8f567e4494a0ff855fdc90ff0f2abe
     </AppStateProvider>
   );
 }

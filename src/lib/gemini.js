@@ -3,6 +3,7 @@ import { auth } from './firebase.js';
 import { buildFoodPreferencePromptBlock, getFoodPreferenceCacheFragment, getFoodPreferenceSummaryLines, withFoodPreferences } from './foodPreferences.js';
 import { normalizeRecipePayload } from './ingredientIntelligence.js';
 export { buildAbsoluteGuardrail } from './brandDatabase.js';
+export { buildFoodPreferencePromptBlock } from './foodPreferences.js';
 export { normalizeRecipePayload } from './ingredientIntelligence.js';
 
 export const GEMINI_API_ENDPOINT = '/api/gemini';
