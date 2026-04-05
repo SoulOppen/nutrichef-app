@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Apple, Camera, ChefHat, ChevronRight, Flame, PiggyBank, RefreshCw, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import RecipeModal from '../components/RecipeModal.jsx';
 import { useAppState } from '../context/appState.js';
+import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import {
   buildAbsoluteGuardrail,
   buildBudgetOptimizationInstruction,
+  buildFoodPreferencePromptBlock,
   buildGeneratorRecipeCacheKey,
   buildGeneratorSuggestionsCacheKey,
   buildLocaleInstruction,
@@ -22,6 +25,8 @@ import {
   readStoredJson,
   writeStoredJson,
 } from '../lib/gemini.js';
+import { withFoodPreferences } from '../lib/foodPreferences.js';
+import { ROUTES } from '../routes/paths.js';
 
 // ─── Configuración del slider de complejidad ──────────────────────────────────
 const COMPLEXITY_LEVELS = [
@@ -88,7 +93,9 @@ const COMPLEXITY_LEVELS = [
 ];
 
 export default function GeneratorView() {
+  const navigate = useNavigate();
   const { profile, setProfile, favoriteRecipes } = useAppState();
+  const { preferences, summaryLines } = useFoodPreferences();
   const [ingredients, setIngredients] = useState('');
   const [dishType, setDishType] = useState('Plato Principal (Salado)');
   const [complexityValue, setComplexityValue] = useState(2); // default: Normal
@@ -111,6 +118,8 @@ export default function GeneratorView() {
   const fileInputRef = useRef(null);
 
   const complexity = COMPLEXITY_LEVELS[complexityValue];
+  const effectiveProfile = withFoodPreferences(profile, preferences);
+  const foodPreferenceInstruction = buildFoodPreferencePromptBlock(effectiveProfile);
   const cooldownRemainingMs = Math.max(0, cooldownUntil - now);
   const isCooldownActive = cooldownRemainingMs > 0;
   const cooldownLabel = isCooldownActive ? `Disponible en ${Math.ceil(cooldownRemainingMs / 1000)}s` : null;
@@ -133,8 +142,9 @@ export default function GeneratorView() {
       setScanning(true);
       try {
         const prompt = `Analiza esta imagen.
-Perfil del usuario: ${compactProfile(profile)}.
-${buildAbsoluteGuardrail(profile)}
+Perfil del usuario: ${compactProfile(effectiveProfile)}.
+${foodPreferenceInstruction}
+${buildAbsoluteGuardrail(effectiveProfile)}
 Si es un producto o etiqueta y contiene un alérgeno o ingrediente conflictivo, responde SOLO este JSON:
 {"mode":"product","headline":"¡CUIDADO! Contiene [alérgeno]","ingredientsText":"","detected":["..."]}.
 Si es una imagen de ingredientes o comida segura, responde SOLO este JSON:
@@ -176,7 +186,7 @@ Si es una imagen de ingredientes o comida segura, responde SOLO este JSON:
       dishType,
       difficulty: complexity.label,
       cuisine,
-      profile: { ...profile, favoriteTitles: favoriteRecipes.map(r => r.title) }
+      profile: { ...effectiveProfile, favoriteTitles: favoriteRecipes.map(r => r.title) }
     });
     const suggestionsCache = readStoredJson(GENERATOR_SUGGESTIONS_CACHE_KEY, {});
 
@@ -190,19 +200,20 @@ Si es una imagen de ingredientes o comida segura, responde SOLO este JSON:
     setError(null); setQuotaNotice(null); setCacheNotice(null);
     setSuggestions(null); setSelectedRecipe(null);
 
-    const profileStr = compactProfile(profile);
-    const localeStr = buildLocaleInstruction(profile);
-    const superStr = buildSupermarketInstruction(profile);
-    const brandStr = buildLocalBrandInstruction(profile);
-    const guardrailStr = buildAbsoluteGuardrail(profile);
+    const profileStr = compactProfile(effectiveProfile);
+    const localeStr = buildLocaleInstruction(effectiveProfile);
+    const superStr = buildSupermarketInstruction(effectiveProfile);
+    const brandStr = buildLocalBrandInstruction(effectiveProfile);
+    const guardrailStr = buildAbsoluteGuardrail(effectiveProfile);
     const timeStr = buildTimeConstraint(maxTime);
-    const budgetStr = buildBudgetOptimizationInstruction(profile);
-    const cuisineLabel = cuisine === 'Comida Local' ? `Cocina típica de ${profile.country || 'Chile'}` : cuisine;
+    const budgetStr = buildBudgetOptimizationInstruction(effectiveProfile);
+    const cuisineLabel = cuisine === 'Comida Local' ? `Cocina típica de ${effectiveProfile.country || 'Chile'}` : cuisine;
 
     const prompt = `${localeStr}
 Eres un chef IA. Genera 3 opciones de ${dishType} estilo ${cuisineLabel} usando: ${ingredients}.
 Perfil: ${profileStr}.
 ${favoriteRecipes.length > 0 ? `Le gustan: ${favoriteRecipes.map(r => r.title).join(', ')}.` : ''}
+${foodPreferenceInstruction}
 ${guardrailStr}
 ${timeStr}
 ${superStr}
@@ -236,23 +247,24 @@ Devuelve SOLO este JSON:
       return;
     }
 
-    const recipeCacheKey = buildGeneratorRecipeCacheKey({ suggestion: sugg, ingredients, profile, timeLimit: maxTime });
+    const recipeCacheKey = buildGeneratorRecipeCacheKey({ suggestion: sugg, ingredients, profile: effectiveProfile, timeLimit: maxTime });
     setGeneratingRecipe(true);
     setError(null); setQuotaNotice(null); setCacheNotice(null);
 
-    const profileStr2 = compactProfile(profile);
-    const localeStr2 = buildLocaleInstruction(profile);
-    const superStr2 = buildSupermarketInstruction(profile);
-    const brandStr2 = buildLocalBrandInstruction(profile);
-    const guardrailStr2 = buildAbsoluteGuardrail(profile);
+    const profileStr2 = compactProfile(effectiveProfile);
+    const localeStr2 = buildLocaleInstruction(effectiveProfile);
+    const superStr2 = buildSupermarketInstruction(effectiveProfile);
+    const brandStr2 = buildLocalBrandInstruction(effectiveProfile);
+    const guardrailStr2 = buildAbsoluteGuardrail(effectiveProfile);
     const timeStr2 = buildTimeConstraint(maxTime);
-    const budgetStr2 = buildBudgetOptimizationInstruction(profile);
-    const cuisineLabel2 = cuisine === 'Comida Local' ? `Cocina típica de ${profile.country || 'Chile'}` : cuisine;
+    const budgetStr2 = buildBudgetOptimizationInstruction(effectiveProfile);
+    const cuisineLabel2 = cuisine === 'Comida Local' ? `Cocina típica de ${effectiveProfile.country || 'Chile'}` : cuisine;
 
     const prompt = `${localeStr2}
 Receta completa de ${dishType} estilo ${cuisineLabel2}: "${sugg.name}".
 ${sugg.description}. Ingredientes disponibles: ${ingredients}.
 Perfil: ${profileStr2}.
+${foodPreferenceInstruction}
 ${guardrailStr2}
 ${timeStr2}
 ${superStr2}
@@ -287,6 +299,40 @@ ${RECIPE_JSON_SCHEMA}`;
           </h3>
 
           <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    Preferencias activas
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                    La IA las aplica siempre en cada resultado.
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate(ROUTES.preferences)}
+                  className="text-xs font-bold hover:underline"
+                  style={{ color: 'var(--c-primary)' }}
+                >
+                  Editar
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {summaryLines.length > 0 ? summaryLines.map(item => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 dark:border-gray-600 dark:bg-gray-900 dark:text-slate-200"
+                  >
+                    {item}
+                  </span>
+                )) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    Sin preferencias adicionales.
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Ingredientes */}
             <div>
               <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">Ingredientes Disponibles</label>

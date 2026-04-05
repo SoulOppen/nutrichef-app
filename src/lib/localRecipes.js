@@ -4,6 +4,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // DESAYUNOS DE FUERZA (Powerlifting / Alta proteína)
 // ─────────────────────────────────────────────────────────────────────────────
+import { isDietSelected, matchesRestriction, withFoodPreferences } from './foodPreferences.js';
+
 const DESAYUNOS_FUERZA = [
   {
     title: 'Omelette de claras con avena',
@@ -676,10 +678,25 @@ export const POPULAR_RECIPES = [
 ];
 
 // ── Función de búsqueda mejorada con filtros de dieta y deporte ───────────────
+function getMacroValue(recipe, key) {
+  return parseFloat(String(recipe?.macros?.[key] || '0').replace(/[^\d.]/g, '')) || 0;
+}
+
+function containsRecipeSignal(recipe, signals = []) {
+  const haystack = [
+    recipe?.title || '',
+    ...(recipe?.tags || []),
+    ...(recipe?.ingredients || []).map(ingredient => ingredient.name || ''),
+  ].join(' ').toLowerCase();
+
+  return signals.some(signal => haystack.includes(signal));
+}
+
 export function searchLocalRecipes(query, profile = null) {
   if (!query?.trim() && !profile) return [];
 
   const q = (query || '').trim().toLowerCase();
+  profile = profile ? withFoodPreferences(profile, profile?.foodPreferences) : profile;
 
   return POPULAR_RECIPES.filter(recipe => {
     // ── Filtro Kosher: si el perfil requiere Kosher, excluir no-Kosher ──
@@ -696,6 +713,15 @@ export function searchLocalRecipes(query, profile = null) {
 
     // ── Filtro de alérgenos ──
     if (profile?.allergies?.includes('Sin Lácteos') && recipe.isDairy) return false;
+    if (matchesRestriction(profile, ['sin lacteos', 'sin lactosa']) && recipe.isDairy) return false;
+    if (isDietSelected(profile, 'high_protein') && getMacroValue(recipe, 'protein') < 18) return false;
+    if (isDietSelected(profile, 'low_carb') && getMacroValue(recipe, 'carbs') > 25) return false;
+    if (isDietSelected(profile, 'keto') && getMacroValue(recipe, 'carbs') > 15) return false;
+    if (isDietSelected(profile, 'pescatarian') && containsRecipeSignal(recipe, ['pollo', 'pavo', 'res', 'cerdo', 'carne', 'jamon', 'ham', 'beef', 'chicken', 'turkey'])) return false;
+    if (isDietSelected(profile, 'paleo') && (
+      recipe.isDairy ||
+      containsRecipeSignal(recipe, ['arroz', 'avena', 'pan', 'pasta', 'fideos', 'quinoa', 'lentejas', 'garbanzos', 'porotos', 'frijol', 'soja', 'maiz'])
+    )) return false;
 
     // ── Si no hay query, devolver todas las que pasen los filtros ──
     if (!q) return true;

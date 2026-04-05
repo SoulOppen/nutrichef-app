@@ -3,8 +3,10 @@ import { ChefHat, RefreshCw, Search, Sparkles, Zap } from 'lucide-react';
 import RecipeModal from '../components/RecipeModal.jsx';
 import FilterSelector from '../components/FilterSelector.jsx';
 import { useAppState } from '../context/appState.js';
+import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import {
   buildAbsoluteGuardrail,
+  buildFoodPreferencePromptBlock,
   callGeminiAPI, compactProfile,
   buildExploreCacheKey, buildGeneratorRecipeCacheKey,
   buildLocaleInstruction, buildLocalBrandInstruction, buildSupermarketInstruction,
@@ -12,6 +14,7 @@ import {
   EXPLORE_CACHE_KEY, GENERATOR_RECIPE_CACHE_KEY,
   RECIPE_JSON_SCHEMA,
 } from '../lib/gemini.js';
+import { withFoodPreferences } from '../lib/foodPreferences.js';
 import { searchLocalRecipes, getFeaturedRecipes, POPULAR_RECIPES } from '../lib/localRecipes.js';
 
 // Recetas populares para mostrar en el estado vacío (sin búsqueda)
@@ -25,6 +28,7 @@ const QUICK_PICKS = POPULAR_RECIPES.slice(0, 6).map(r => ({
 
 export default function ExploreView() {
   const { profile, favoriteRecipes, saveGeneratedRecipe } = useAppState();
+  const { preferences, summaryLines } = useFoodPreferences();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState(null);
@@ -34,10 +38,12 @@ export default function ExploreView() {
   const [noLocalResults, setNoLocalResults] = useState(false);
   const [detectedMode, setDetectedMode] = useState('creative');
   const [forcedMode, setForcedMode] = useState(null); // null | 'local' | 'literal' | 'creative'
+  const effectiveProfile = withFoodPreferences(profile, preferences);
+  const foodPreferenceInstruction = buildFoodPreferencePromptBlock(effectiveProfile);
 
   // Recetas destacadas filtradas por perfil
   const featuredRecipes = (typeof getFeaturedRecipes === 'function'
-    ? getFeaturedRecipes(profile, 6)
+    ? getFeaturedRecipes(effectiveProfile, 6)
     : POPULAR_RECIPES.slice(0, 6)
   ).map(r => ({ id: r.title, name: r.title, type: r.cuisine, description: r.description, _local: r }));
 
@@ -57,7 +63,7 @@ export default function ExploreView() {
 
     // Buscar local con filtros de perfil (Kosher, dieta, etc.)
     const localFn = typeof searchLocalRecipes === 'function' ? searchLocalRecipes : () => [];
-    const localResults = localFn(query, profile);
+    const localResults = localFn(query, effectiveProfile);
 
     if (localResults.length > 0) {
       // Modo literal: mostrar solo el resultado más relevante
@@ -78,14 +84,15 @@ export default function ExploreView() {
     setDetectedMode(intent);
     setSourceLabel(intent === 'literal' ? 'ia-literal' : 'ia-creative');
 
-    const cacheKey = buildExploreCacheKey({ query, mode: intent, profile });
+    const cacheKey = buildExploreCacheKey({ query, mode: intent, profile: effectiveProfile });
     const prompt = buildSearchPrompt({
       query, mode: intent,
-      profileStr: compactProfile(profile),
-      localeStr: buildLocaleInstruction(profile),
-      supermarketInstruction: buildSupermarketInstruction(profile),
-      brandInstruction: buildLocalBrandInstruction(profile),
-      guardrailInstruction: buildAbsoluteGuardrail(profile),
+      profileStr: compactProfile(effectiveProfile),
+      localeStr: buildLocaleInstruction(effectiveProfile),
+      supermarketInstruction: buildSupermarketInstruction(effectiveProfile),
+      brandInstruction: buildLocalBrandInstruction(effectiveProfile),
+      foodPreferenceInstruction,
+      guardrailInstruction: buildAbsoluteGuardrail(effectiveProfile),
       favoritesStr: favoriteRecipes.length > 0 ? favoriteRecipes.map(r => r.title).join(', ') : '',
     });
 
@@ -103,11 +110,11 @@ export default function ExploreView() {
     setGeneratingRecipe(true);
     setSuggestions(null);
 
-    const cacheKey = buildGeneratorRecipeCacheKey({ suggestion: sugg, ingredients: query, profile });
-    const localeStr = buildLocaleInstruction(profile);
-    const superStr = buildSupermarketInstruction(profile);
-    const brandStr = buildLocalBrandInstruction(profile);
-    const guardrailStr = buildAbsoluteGuardrail(profile);
+    const cacheKey = buildGeneratorRecipeCacheKey({ suggestion: sugg, ingredients: query, profile: effectiveProfile });
+    const localeStr = buildLocaleInstruction(effectiveProfile);
+    const superStr = buildSupermarketInstruction(effectiveProfile);
+    const brandStr = buildLocalBrandInstruction(effectiveProfile);
+    const guardrailStr = buildAbsoluteGuardrail(effectiveProfile);
     // En modo literal, instrucción explícita de no añadir extras
     const literalNote = detectedMode === 'literal'
       ? '\nIMPORTANTE: Solo la receta exacta pedida. Sin acompañamientos ni extras no solicitados.'
@@ -115,7 +122,7 @@ export default function ExploreView() {
 
     const prompt = `${localeStr}
 Receta completa para "${sugg.name}". ${sugg.description}.
-Perfil: ${compactProfile(profile)}.${guardrailStr ? `\n${guardrailStr}` : ''}${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}
+Perfil: ${compactProfile(effectiveProfile)}.${foodPreferenceInstruction ? `\n${foodPreferenceInstruction}` : ''}${guardrailStr ? `\n${guardrailStr}` : ''}${superStr ? `\n${superStr}` : ''}${brandStr ? `\n${brandStr}` : ''}${literalNote}
 Devuelve SOLO este JSON:
 ${RECIPE_JSON_SCHEMA}`;
 
@@ -169,10 +176,14 @@ ${RECIPE_JSON_SCHEMA}`;
         </div>
 
         {/* Dietary filter notice */}
-        {profile.religiousDiet && profile.religiousDiet !== 'Ninguna' && (
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            🔍 Filtrando para <strong className="text-slate-600 dark:text-slate-300">{profile.religiousDiet}</strong> · {profile.country || 'Chile'}
-          </p>
+        {summaryLines.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {summaryLines.map(item => (
+              <span key={item} className="rounded-full bg-slate-100 dark:bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                {item}
+              </span>
+            ))}
+          </div>
         )}
       </div>
 

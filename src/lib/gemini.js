@@ -1,4 +1,6 @@
 import { buildAbsoluteGuardrail, buildBrandContext } from './brandDatabase.js';
+import { auth } from './firebase.js';
+import { buildFoodPreferencePromptBlock, getFoodPreferenceCacheFragment, getFoodPreferenceSummaryLines, withFoodPreferences } from './foodPreferences.js';
 import { normalizeRecipePayload } from './ingredientIntelligence.js';
 export { buildAbsoluteGuardrail } from './brandDatabase.js';
 export { normalizeRecipePayload } from './ingredientIntelligence.js';
@@ -74,6 +76,9 @@ export function calculateTDEE(profile) {
 
 // ── Perfil compacto con deporte ───────────────────────────────────────────────
 export function compactProfile(profile) {
+  const effectiveProfile = withFoodPreferences(profile, profile?.foodPreferences);
+  const foodPreferenceLines = getFoodPreferenceSummaryLines(effectiveProfile);
+  profile = effectiveProfile;
   const parts = [];
   if (profile.goals) parts.push(`Obj:${profile.goals}`);
   if (profile.dailyCalories) parts.push(`Cal:${profile.dailyCalories}kcal`);
@@ -89,6 +94,7 @@ export function compactProfile(profile) {
   if (profile.dietaryStyle && profile.dietaryStyle !== 'Ninguna') parts.push(`Dieta:${profile.dietaryStyle}`);
   if (profile.religiousDiet && profile.religiousDiet !== 'Ninguna') parts.push(`Religion:${profile.religiousDiet}`);
   if (profile.allergies?.length) parts.push(`Alergias:${profile.allergies.join(',')}`);
+  if (foodPreferenceLines.length) parts.push(`FoodPrefs:${foodPreferenceLines.join(',')}`);
   if (profile.dislikes?.length) parts.push(`Evitar:${profile.dislikes.join(',')}`);
   if (profile.learnedPreferences?.length) parts.push(`IA:${profile.learnedPreferences.join('|')}`);
   if (profile.useProteinPowder) parts.push('ProtPolvo:Si');
@@ -122,6 +128,7 @@ export function setRecipeCache(c) { setCache(GENERATOR_RECIPE_CACHE_KEY, c); }
 
 // ── Cache Keys ────────────────────────────────────────────────────────────────
 export function buildGeneratorRecipeCacheKey({ suggestion, ingredients, profile, timeLimit }) {
+  const foodPreferences = getFoodPreferenceCacheFragment(profile);
   return JSON.stringify({
     v: 'recipe-safety-v2',
     n: suggestion.name,
@@ -137,9 +144,11 @@ export function buildGeneratorRecipeCacheKey({ suggestion, ingredients, profile,
     bf: profile.budgetFriendly || false,
     c: profile.country || 'Chile',
     s: (profile.preferredSupermarkets || []).slice().sort(),
+    fp: foodPreferences,
   });
 }
 export function buildGeneratorSuggestionsCacheKey({ ingredients, profile, dishType, difficulty, cuisine }) {
+  const foodPreferences = getFoodPreferenceCacheFragment(profile);
   return JSON.stringify({
     v: 'suggestions-safety-v2',
     i: ingredients.trim().toLowerCase(),
@@ -154,9 +163,11 @@ export function buildGeneratorSuggestionsCacheKey({ ingredients, profile, dishTy
     bf: profile.budgetFriendly || false,
     country: profile.country || 'Chile',
     supers: (profile.preferredSupermarkets || []).slice().sort(),
+    fp: foodPreferences,
   });
 }
 export function buildExploreCacheKey({ query, mode, profile }) {
+  const foodPreferences = getFoodPreferenceCacheFragment(profile);
   return JSON.stringify({
     v: 'explore-safety-v2',
     q: query.trim().toLowerCase(),
@@ -166,9 +177,11 @@ export function buildExploreCacheKey({ query, mode, profile }) {
     a: profile.allergies,
     dl: profile.dislikes,
     r: profile.religiousDiet,
+    fp: foodPreferences,
   });
 }
 export function buildMealPlanCacheKey({ planType, isTrainingDay, planPreferences, profile, savedMeals }) {
+  const foodPreferences = getFoodPreferenceCacheFragment(profile);
   return JSON.stringify({
     v: 'mealplan-options-v3',
     t: planType,
@@ -184,9 +197,11 @@ export function buildMealPlanCacheKey({ planType, isTrainingDay, planPreferences
     country: profile.country || 'Chile',
     supers: (profile.preferredSupermarkets || []).slice().sort(),
     saved: savedMeals.map(m => m.title),
+    fp: foodPreferences,
   });
 }
 export function buildShoppingCacheKey(plan, profile = {}) {
+  const foodPreferences = getFoodPreferenceCacheFragment(profile);
   const meals = plan?.days?.flatMap(day =>
     day.meals?.flatMap(meal =>
       meal.options?.map(option => ({
@@ -206,6 +221,7 @@ export function buildShoppingCacheKey(plan, profile = {}) {
     dl: profile.dislikes || [],
     country: profile.country || 'Chile',
     supers: (profile.preferredSupermarkets || []).slice().sort(),
+    fp: foodPreferences,
   });
 }
 
@@ -288,9 +304,10 @@ export function buildRecipePrompt({ name, description, ingredients, profileStr, 
   const brandCtx = buildBrandContext(profile);
   const needsBrands = brandCtx.length > 0;
   const guardrail = buildAbsoluteGuardrail(profile);
+  const foodPreferenceInstruction = buildFoodPreferencePromptBlock(profile);
   return `Receta completa para "${name}".${description ? ` Contexto: ${description}.` : ''}${ingredients ? ` Ingredientes: ${ingredients}.` : ''}
 Perfil: ${profileStr}.
-${guardrail}${brandCtx}
+${foodPreferenceInstruction ? `${foodPreferenceInstruction}\n` : ''}${guardrail}${brandCtx}
 REGLAS ESTRICTAS DE FORMATO — INCUMPLIRLAS INVALIDA LA RESPUESTA:
 1. PROHIBIDO generar párrafos introductorios o explicaciones de por qué la receta se adapta al usuario. La salida es directa.
 2. El campo "description" tiene máximo 15 palabras. Sin justificaciones de dieta. Ejemplo: "Pollo al limón con hierbas, listo en 20 minutos".
@@ -309,8 +326,11 @@ ${RECIPE_JSON_SCHEMA}`;
 export async function fetchGeminiContent({ kind, payload }) {
   const cooldownUntil = getGeminiCooldownUntil();
   if (cooldownUntil > Date.now()) throw new Error(getCooldownMessage(cooldownUntil));
+  const user = auth.currentUser;
+  if (!user) throw new Error('Debes iniciar sesion');
+  const token = await user.getIdToken();
   const response = await fetch(GEMINI_API_ENDPOINT, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ kind, payload })
   });
   const data = await response.json().catch(() => ({}));
@@ -568,24 +588,25 @@ export function detectSearchIntent(query) {
   return 'creative';
 }
 
-export function buildSearchPrompt({ query, mode, profileStr, localeStr, supermarketInstruction, brandInstruction, favoritesStr, pesachInstruction, guardrailInstruction = '' }) {
+export function buildSearchPrompt({ query, mode, profileStr, localeStr, supermarketInstruction, brandInstruction, favoritesStr, pesachInstruction, foodPreferenceInstruction = '', guardrailInstruction = '' }) {
   const favPart = favoritesStr ? ` Le gustan: ${favoritesStr}.` : '';
   const superPart = supermarketInstruction ? `\n${supermarketInstruction}` : '';
   const brandPart = brandInstruction ? `\n${brandInstruction}` : '';
   const pesachPart = pesachInstruction ? `\n${pesachInstruction}` : '';
+  const foodPreferencePart = foodPreferenceInstruction ? `\n${foodPreferenceInstruction}` : '';
   const guardrailPart = guardrailInstruction ? `\n${guardrailInstruction}` : '';
 
   if (mode === 'literal') {
     return `${localeStr}
 El usuario busca EXACTAMENTE: "${query}".
-Perfil: ${profileStr}.${favPart}${guardrailPart}${superPart}${brandPart}${pesachPart}
+Perfil: ${profileStr}.${favPart}${foodPreferencePart}${guardrailPart}${superPart}${brandPart}${pesachPart}
 MODO LITERAL: Devuelve SOLO la receta exacta pedida. NO añadas acompañamientos ni menús completos.
 Devuelve SOLO este JSON con 1 resultado:
 {"suggestions":[{"id":1,"name":"[nombre exacto]","type":"[método]","description":"Receta exacta sin variaciones"}]}`;
   }
 
   return `${localeStr}
-El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${guardrailPart}${superPart}${brandPart}${pesachPart}
+El usuario busca: "${query}". Genera 3 opciones adaptadas a su perfil: ${profileStr}.${favPart}${foodPreferencePart}${guardrailPart}${superPart}${brandPart}${pesachPart}
 Devuelve SOLO este JSON:
 {"suggestions":[{"id":1,"name":"...","type":"...","description":"..."},{"id":2,"name":"...","type":"...","description":"..."},{"id":3,"name":"...","type":"...","description":"..."}]}`;
 }
@@ -648,9 +669,13 @@ export function extractDislikedIngredient(instruction = '') {
   return null;
 }
 
-export async function refineRecipe(recipe, instruction) {
+export async function refineRecipe(recipe, instruction, profile = {}) {
   if (!recipe) throw new Error('No hay receta para ajustar.');
   if (!instruction?.trim()) throw new Error('Ingresa un ajuste para la receta.');
+
+  profile = withFoodPreferences(profile, profile?.foodPreferences);
+  const foodPreferenceInstruction = buildFoodPreferencePromptBlock(profile);
+  const guardrailInstruction = buildAbsoluteGuardrail(profile);
 
   const refinementSchema = `{
   "title": "Nombre del plato",
@@ -670,6 +695,7 @@ export async function refineRecipe(recipe, instruction) {
 Mantén el mismo idioma de la receta original.
 Si el usuario pide quitar o reemplazar ingredientes, actualiza ingredientes, pasos, tiempos y macros para que sean coherentes.
 Si detectas ingredientes de la receta que coinciden con alergias o dislikes del usuario, márcalos y devuelve un sustituto inmediato.
+${foodPreferenceInstruction ? `${foodPreferenceInstruction}\n` : ''}${guardrailInstruction ? `${guardrailInstruction}\n` : ''}Perfil activo: ${compactProfile(profile) || 'Sin preferencias adicionales'}.
 Devuelve SOLO un JSON válido con este esquema:
 ${refinementSchema}
 

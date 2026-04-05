@@ -1,6 +1,8 @@
 // Base de datos local de marcas verificadas por categoría.
 // Sirve como contexto para la IA y como filtro estricto en la UI.
 
+import { getFoodPreferenceSummaryLines, isDietSelected, withFoodPreferences } from './foodPreferences.js';
+
 function createBrand(name, note, category, safety = {}) {
   return { name, note, category, safety };
 }
@@ -70,15 +72,16 @@ function flattenBrandCatalog() {
 }
 
 function getRequiredSafetyChecks(profile) {
+  profile = withFoodPreferences(profile, profile?.foodPreferences);
   const checks = [];
 
   if (profile.pesachMode) checks.push({ key: 'kosherPassover', label: 'Apto Pésaj' });
   if (profile.religiousDiet === 'Kosher') checks.push({ key: 'kosher', label: 'Apto Kosher' });
   if (profile.religiousDiet === 'Halal') checks.push({ key: 'halal', label: 'Apto Halal' });
 
-  if (profile.dietaryStyle === 'Vegana') {
+  if (profile.dietaryStyle === 'Vegana' || isDietSelected(profile, 'vegan')) {
     checks.push({ key: 'vegan', label: 'Vegano' });
-  } else if (profile.dietaryStyle === 'Vegetariana') {
+  } else if (profile.dietaryStyle === 'Vegetariana' || isDietSelected(profile, 'vegetarian')) {
     checks.push({ anyOf: ['vegetarian', 'vegan'], label: 'Vegetariano' });
   }
 
@@ -109,21 +112,25 @@ export function findBrandByName(name) {
 }
 
 export function getRelevantBrandCategories(profile) {
+  profile = withFoodPreferences(profile, profile?.foodPreferences);
   const cats = [];
   if (profile.pesachMode) cats.push('pesach');
   if (profile.religiousDiet === 'Kosher') cats.push('kosher');
   if (profile.religiousDiet === 'Halal') cats.push('halal');
-  if (profile.dietaryStyle === 'Vegana') cats.push('vegan');
-  if (profile.dietaryStyle === 'Vegetariana') cats.push('vegetariana');
-  if (profile.sportType === 'Fuerza/Powerlifting' || profile.useProteinPowder) cats.push('powerlifting');
+  if (profile.dietaryStyle === 'Vegana' || isDietSelected(profile, 'vegan')) cats.push('vegan');
+  if (profile.dietaryStyle === 'Vegetariana' || isDietSelected(profile, 'vegetarian')) cats.push('vegetariana');
+  if (profile.sportType === 'Fuerza/Powerlifting' || profile.useProteinPowder || isDietSelected(profile, 'high_protein')) cats.push('powerlifting');
   return [...new Set(cats)];
 }
 
 export function buildAbsoluteGuardrail(profile) {
+  profile = withFoodPreferences(profile, profile?.foodPreferences);
   const rules = [];
+  const foodPreferenceLines = getFoodPreferenceSummaryLines(profile);
   if (profile.religiousDiet && profile.religiousDiet !== 'Ninguna') rules.push(`Dieta religiosa: ${profile.religiousDiet}`);
   if (profile.dietaryStyle && profile.dietaryStyle !== 'Ninguna') rules.push(`Estilo: ${profile.dietaryStyle}`);
   if (profile.allergies?.length) rules.push(`Alergias: ${profile.allergies.join(', ')}`);
+  if (foodPreferenceLines.length) rules.push(`Core: ${foodPreferenceLines.join(', ')}`);
   if (profile.dislikes?.length) rules.push(`Ingredientes que no le gustan: ${profile.dislikes.join(', ')}`);
   if (profile.pesachMode) rules.push('Modo Pésaj activo');
 

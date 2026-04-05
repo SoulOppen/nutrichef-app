@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, ChevronRight, Globe, RefreshCw, Type, X } from 'lucide-react';
 import { useAppState } from '../context/appState.js';
+import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
-import { buildAbsoluteGuardrail, compactProfile, normalizeRecipePayload } from '../lib/gemini.js';
+import { buildAbsoluteGuardrail, buildFoodPreferencePromptBlock, compactProfile, normalizeRecipePayload } from '../lib/gemini.js';
+import { withFoodPreferences } from '../lib/foodPreferences.js';
 
 
 // Ícono SVG de Instagram (sin dependencias externas)

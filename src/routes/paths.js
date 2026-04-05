@@ -5,6 +5,7 @@ export const ROUTES = {
   saved: '/saved',
   plan: '/plan',
   profile: '/profile',
+  preferences: '/preferences',
   settings: '/settings',
   onboarding: '/onboarding',
 };
