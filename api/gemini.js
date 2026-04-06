@@ -1,57 +1,46 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+// ── Rate limit simple por IP (in-memory, se resetea con cada cold start) ────
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minuto
+const RATE_LIMIT_MAX = 15;              // máx requests por ventana
+const ipHits = new Map();
 
-function getFirebaseAdminAuth() {
-  if (!getApps().length) {
-    const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY } = process.env;
+function isRateLimited(ip) {
+  const now = Date.now();
+  const entry = ipHits.get(ip);
 
-    if (!FIREBASE_PROJECT_ID || !FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY) {
-      throw new Error("Missing Firebase Admin credentials");
-    }
-
-    initializeApp({
-      credential: cert({
-        projectId: FIREBASE_PROJECT_ID,
-        clientEmail: FIREBASE_CLIENT_EMAIL,
-        privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      }),
-    });
+  if (!entry || now > entry.resetAt) {
+    ipHits.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
   }
 
-  return getAuth();
+  entry.count += 1;
+  return entry.count > RATE_LIMIT_MAX;
 }
 
+// ── Handler ─────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
     if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Missing API key" });
+      console.error("CONFIG ERROR: GEMINI_API_KEY not set");
+      return res.status(500).json({ error: "Server misconfiguration" });
     }
 
-    const authorization = req.headers.authorization || "";
+    // Rate limit por IP
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+             || req.socket?.remoteAddress
+             || "unknown";
 
-    if (!authorization.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Missing Authorization bearer token" });
+    if (isRateLimited(ip)) {
+      return res.status(429).json({ error: "Demasiadas solicitudes. Intenta en un momento." });
     }
 
-    const token = authorization.slice("Bearer ".length).trim();
-
-    if (!token) {
-      return res.status(401).json({ error: "Missing Firebase ID token" });
-    }
-
-    try {
-      await getFirebaseAdminAuth().verifyIdToken(token);
-    } catch (error) {
-      console.error("AUTH ERROR:", error);
-      return res.status(401).json({ error: "Invalid or expired Firebase ID token" });
-    }
-
-    // El cliente ya envÃ­a el body en formato Gemini vÃ¡lido dentro de `payload`.
-    // Solo lo re-enviamos tal cual, sin re-envolver.
     const { payload } = req.body || {};
 
-    if (!payload) {
-      return res.status(400).json({ error: "Missing payload" });
+    if (!payload || typeof payload !== "object") {
+      return res.status(400).json({ error: "Missing or invalid payload" });
     }
 
     const response = await fetch(
@@ -68,7 +57,7 @@ export default async function handler(req, res) {
     if (!response.ok) {
       console.error("GEMINI ERROR:", JSON.stringify(data));
       return res.status(response.status).json({
-        error: data.error?.message,
+        error: data.error?.message || "Gemini API error",
         raw: data,
       });
     }
