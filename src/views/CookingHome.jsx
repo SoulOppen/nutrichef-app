@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Flame, Package, RefreshCw, ShoppingBag, Sparkles } from 'lucide-react';
 import RecipeBottomSheet from '../components/RecipeBottomSheet.jsx';
-import { MealPrepPlanCard, MealPrepSheet } from '../components/MealPrepPlanCard.jsx';
+import { MealPrepResultCard, MealPrepSheet } from '../components/MealPrepPlanCard.jsx';
 import { useCooking } from '../hooks/useCooking.js';
 import { useMealPrep } from '../hooks/useMealPrep.js';
 
@@ -60,7 +60,7 @@ function RecipeResultCard({ recipe, onView }) {
 
 // ── Accordion card wrapper ────────────────────────────────────────────────────
 
-function CookingCard({ icon: Icon, title, subtitle, isOpen, onToggle, ctaLabel, onGenerate, loading, result, onViewResult, planOptions, onSelectPlan, planRecommendedIndex, children }) {
+function CookingCard({ icon: Icon, title, subtitle, isOpen, onToggle, ctaLabel, onGenerate, loading, loadingLabel, result, resultRenderer, children }) {
   return (
     <div
       className={`rounded-3xl overflow-hidden bg-white dark:bg-gray-900 transition-all duration-200 ${
@@ -114,30 +114,13 @@ function CookingCard({ icon: Icon, title, subtitle, isOpen, onToggle, ctaLabel, 
               style={{ background: 'var(--c-primary)' }}
             >
               {loading
-                ? <><RefreshCw size={16} className="animate-spin" /> Generando receta...</>
+                ? <><RefreshCw size={16} className="animate-spin" /> {loadingLabel || 'Generando...'}</>
                 : <><Sparkles size={16} /> {ctaLabel}</>
               }
             </button>
 
-            {/* Generated recipe preview — tap to re-open */}
-            {result && <RecipeResultCard recipe={result} onView={onViewResult} />}
-
-            {/* Meal prep plan cards */}
-            {planOptions && planOptions.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                  Elige un plan
-                </p>
-                {planOptions.map((plan, i) => (
-                  <MealPrepPlanCard
-                    key={plan.title + i}
-                    plan={plan}
-                    isRecommended={i === planRecommendedIndex}
-                    onSelect={onSelectPlan}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Generated result preview — tap to re-open */}
+            {result && resultRenderer && resultRenderer(result)}
           </div>
         </div>
       </div>
@@ -172,17 +155,13 @@ const DIAS_OPTIONS = [
   { value: '5', label: '5 días' },
 ];
 
-const OBJETIVO_PREP_OPTIONS = [
-  { value: null, label: '🎯 Sin filtro', optional: true },
-  { value: 'alta en proteína', label: '💪 Proteína' },
-  { value: 'baja en calorías', label: '🥗 Ligera' },
-  { value: 'equilibrada y variada', label: '⚖️ Equilibrada' },
-];
-
-const TIEMPO_PREP_OPTIONS = [
-  { value: 'flexible', label: '🕐 Flexible' },
-  { value: '1 hora o menos', label: '⏱ 1 hora' },
-  { value: '30 minutos', label: '⚡ 30 min' },
+// Modo del plan — guía interna para el modelo (no se muestra explícitamente)
+const MODE_OPTIONS = [
+  { value: 'rapido',        label: '⚡ Rápido' },
+  { value: 'alto_proteina', label: '💪 Proteína' },
+  { value: 'alto_en_fibra', label: '🌾 Fibra' },
+  { value: 'vegetariano',   label: '🥗 Veggie' },
+  { value: 'economico',     label: '💸 Económico' },
 ];
 
 const TIPO_OPTIONS = [
@@ -193,27 +172,6 @@ const TIPO_OPTIONS = [
   { value: 'antojo dulce', label: '🍫 Dulce' },
   { value: 'snack', label: '🍎 Snack' },
 ];
-
-// ── Plan recommendation logic ─────────────────────────────────────────────────
-
-function getRecommendedPlanIndex(plans, tipo) {
-  if (!plans || plans.length === 0) return 0;
-
-  if (tipo === 'proteico') {
-    let max = -1, idx = 0;
-    plans.forEach((p, i) => { const v = p.nutrition_summary?.daily_protein ?? 0; if (v > max) { max = v; idx = i; } });
-    return idx;
-  }
-
-  if (tipo === 'liviano') {
-    let min = Infinity, idx = 0;
-    plans.forEach((p, i) => { const v = p.nutrition_summary?.daily_calories ?? Infinity; if (v < min) { min = v; idx = i; } });
-    return idx;
-  }
-
-  const bi = plans.findIndex(p => p.label === 'balanceado');
-  return bi !== -1 ? bi : 0;
-}
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
@@ -234,9 +192,8 @@ export default function CookingHome() {
   const [ingredientes, setIngredientes] = useState('');
 
   // mealPrep params
-  const [dias, setDias] = useState('4');
-  const [objetivoPrep, setObjetivoPrep] = useState(null);
-  const [tiempoDisponible, setTiempoDisponible] = useState('flexible');
+  const [dias, setDias] = useState('3');
+  const [mode, setMode] = useState('rapido');
 
   const { generate, getRecipe, isLoading, getError } = useCooking();
   const mealPrep = useMealPrep();
@@ -244,7 +201,7 @@ export default function CookingHome() {
   // Current params objects — tipo is included so cache keys reflect it
   const cookNowParams = { tiempo, dificultad, objetivo: objetivoCook, tipo };
   const ingredientsParams = { ingredientes: ingredientes.trim(), tipo };
-  const mealPrepParams = { dias, objetivo: objetivoPrep, tiempoDisponible };
+  const mealPrepParams = { dias, mode };
 
   const toggle = (id) => setActiveCard(prev => (prev === id ? null : id));
 
@@ -258,14 +215,15 @@ export default function CookingHome() {
     const recipe = await generate('ingredients', ingredientsParams);
     if (recipe) setViewingRecipe(recipe);
   };
-  const handleMealPrep = () => mealPrep.generate(mealPrepParams);
+  const handleMealPrep = async () => {
+    const plan = await mealPrep.generate(mealPrepParams);
+    if (plan) setViewingPlan(plan);
+  };
 
   // Cached results for current params
   const cookNowRecipe = getRecipe('cookNow', cookNowParams);
   const ingredientsRecipe = getRecipe('ingredients', ingredientsParams);
-  const mealPrepPlans = mealPrep.getPlans(mealPrepParams);
-
-  const mealPrepRec = getRecommendedPlanIndex(mealPrepPlans, tipo);
+  const mealPrepPlan = mealPrep.getPlan(mealPrepParams);
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -314,8 +272,9 @@ export default function CookingHome() {
         ctaLabel={cookNowRecipe ? 'Generar nueva receta' : 'Sugerir receta'}
         onGenerate={handleCookNow}
         loading={isLoading('cookNow', cookNowParams)}
+        loadingLabel="Generando receta..."
         result={cookNowRecipe}
-        onViewResult={() => setViewingRecipe(cookNowRecipe)}
+        resultRenderer={(r) => <RecipeResultCard recipe={r} onView={() => setViewingRecipe(r)} />}
       >
         <ChipGroup label="Tiempo disponible" options={TIEMPO_OPTIONS} value={tiempo} onChange={setTiempo} />
         <ChipGroup label="Dificultad" options={DIFICULTAD_OPTIONS} value={dificultad} onChange={setDificultad} />
@@ -338,8 +297,9 @@ export default function CookingHome() {
         ctaLabel={ingredientsRecipe ? 'Generar nueva receta' : '¿Qué puedo cocinar?'}
         onGenerate={handleIngredients}
         loading={isLoading('ingredients', ingredientsParams)}
+        loadingLabel="Generando receta..."
         result={ingredientsRecipe}
-        onViewResult={() => setViewingRecipe(ingredientsRecipe)}
+        resultRenderer={(r) => <RecipeResultCard recipe={r} onView={() => setViewingRecipe(r)} />}
       >
         <div>
           <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2.5">
@@ -368,16 +328,15 @@ export default function CookingHome() {
         subtitle="Cocina una vez, come varios días"
         isOpen={activeCard === 'mealPrep'}
         onToggle={() => toggle('mealPrep')}
-        ctaLabel={mealPrepPlans ? 'Generar nuevos planes' : 'Planificar meal prep'}
+        ctaLabel={mealPrepPlan ? 'Generar nuevo plan' : 'Planificar meal prep'}
         onGenerate={handleMealPrep}
         loading={mealPrep.isLoading(mealPrepParams)}
-        planOptions={mealPrepPlans}
-        onSelectPlan={setViewingPlan}
-        planRecommendedIndex={mealPrepRec}
+        loadingLabel="Generando plan..."
+        result={mealPrepPlan}
+        resultRenderer={(p) => <MealPrepResultCard plan={p} onView={() => setViewingPlan(p)} />}
       >
         <ChipGroup label="Días a cubrir" options={DIAS_OPTIONS} value={dias} onChange={setDias} />
-        <ChipGroup label="Tiempo para cocinar" options={TIEMPO_PREP_OPTIONS} value={tiempoDisponible} onChange={setTiempoDisponible} />
-        <ChipGroup label="Objetivo (opcional)" options={OBJETIVO_PREP_OPTIONS} value={objetivoPrep} onChange={setObjetivoPrep} />
+        <ChipGroup label="Estilo del plan" options={MODE_OPTIONS} value={mode} onChange={setMode} />
 
         {mealPrep.getError(mealPrepParams) && (
           <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-xl">

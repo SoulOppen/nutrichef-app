@@ -1,94 +1,33 @@
 import { useEffect } from 'react';
-import { ChevronRight, ShoppingCart, Star, X } from 'lucide-react';
+import { ChevronRight, X } from 'lucide-react';
 import { useBottomSheet } from '../hooks/useBottomSheet.js';
 
-// ── Label → icon mapping ───────────────────────────────────────────────────────
+// ── Result preview card (tap to re-open the generated plan) ──────────────────
 
-const PLAN_LABEL_CONFIG = {
-  'rápido':     { icon: '⚡', text: 'Rápido y simple' },
-  'balanceado': { icon: '⚖️', text: 'Balanceado' },
-  'económico':  { icon: '💸', text: 'Económico' },
-};
-
-// ── Plan option card (shown in the 3-option selection list) ───────────────────
-
-export function MealPrepPlanCard({ plan, isRecommended, onSelect }) {
-  const cfg = PLAN_LABEL_CONFIG[plan.label] ?? { icon: '📋', text: plan.label ?? 'Plan' };
-
+export function MealPrepResultCard({ plan, onView }) {
   return (
     <button
       type="button"
-      onClick={() => onSelect(plan)}
-      className={`w-full text-left p-4 rounded-2xl border transition-all active:scale-[0.97] ${
-        isRecommended
-          ? 'border-[--c-primary-border] bg-[--c-primary-light] scale-[1.01] shadow-sm'
-          : 'border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 hover:border-[--c-primary-border]'
-      }`}
-      style={{ transitionDuration: '100ms' }}
+      onClick={onView}
+      className="w-full text-left p-4 rounded-2xl border border-[--c-primary-border] bg-[--c-primary-light] transition-all active:scale-[0.97]"
     >
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`text-[10px] font-black uppercase tracking-widest ${isRecommended ? 'text-[--c-primary-text]' : 'text-slate-400 dark:text-slate-500'}`}>
-            {cfg.icon} {cfg.text}
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
+        {plan.total_time_minutes > 0 && (
+          <span className="text-[10px] font-bold text-[--c-primary-text] opacity-70">
+            ⏱ {plan.total_time_minutes} min cocina
           </span>
-          {isRecommended && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded-full text-white leading-none" style={{ background: 'var(--c-primary)' }}>
-              <Star size={9} fill="currentColor" /> Recomendado
-            </span>
-          )}
-        </div>
-        <div className="shrink-0 text-right">
-          {plan.total_time_minutes > 0 && (
-            <span className="text-[10px] font-bold text-slate-400">⏱ {plan.total_time_minutes} min</span>
-          )}
-          {plan.total_days > 0 && (
-            <span className="text-[10px] font-bold text-slate-400"> · {plan.total_days} días</span>
-          )}
-        </div>
+        )}
+        {plan.total_days > 0 && (
+          <span className="text-[10px] font-bold text-[--c-primary-text] opacity-70">
+            · {plan.total_days} días
+          </span>
+        )}
       </div>
-
-      {/* Plan title */}
-      <p className={`font-black text-sm leading-snug ${isRecommended ? 'text-[--c-primary-text]' : 'text-slate-800 dark:text-white'}`}>
-        {plan.title}
-      </p>
-
-      {/* Recipe chips */}
-      {plan.recipes?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {plan.recipes.slice(0, 3).map((r, i) => (
-            <span
-              key={i}
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                isRecommended
-                  ? 'bg-white/60 text-[--c-primary-text]'
-                  : 'bg-slate-100 dark:bg-gray-700 text-slate-600 dark:text-slate-300'
-              }`}
-            >
-              {r.name}
-            </span>
-          ))}
-        </div>
+      <p className="font-black text-sm leading-snug text-[--c-primary-text]">{plan.title}</p>
+      {plan.description && (
+        <p className="text-xs mt-0.5 text-[--c-primary-text] opacity-80 line-clamp-2">{plan.description}</p>
       )}
-
-      {/* Nutrition mini-row */}
-      {plan.nutrition_summary && (
-        <div className="flex gap-3 mt-2">
-          {plan.nutrition_summary.daily_calories > 0 && (
-            <span className={`text-[10px] font-bold ${isRecommended ? 'text-[--c-primary-text] opacity-80' : 'text-slate-400 dark:text-slate-500'}`}>
-              🔥 {plan.nutrition_summary.daily_calories} cal/día
-            </span>
-          )}
-          {plan.nutrition_summary.daily_protein > 0 && (
-            <span className={`text-[10px] font-bold ${isRecommended ? 'text-[--c-primary-text] opacity-80' : 'text-slate-400 dark:text-slate-500'}`}>
-              💪 {plan.nutrition_summary.daily_protein}g prot
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* CTA hint */}
-      <div className="flex items-center gap-1 mt-2.5" style={{ color: 'var(--c-primary)' }}>
+      <div className="flex items-center gap-1 mt-2" style={{ color: 'var(--c-primary)' }}>
         <span className="text-xs font-bold">Ver plan completo</span>
         <ChevronRight size={13} strokeWidth={2.5} />
       </div>
@@ -111,24 +50,22 @@ function PlanSection({ icon, title, children }) {
 }
 
 function MealPrepPlanDetail({ plan }) {
-  const cfg = PLAN_LABEL_CONFIG[plan.label] ?? { icon: '📋', text: plan.label };
-
   return (
     <div className="px-5 pb-6 space-y-5">
       {/* Plan header */}
       <div>
         <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {cfg.icon} {cfg.text}
-          </span>
           {plan.total_time_minutes > 0 && (
-            <span className="text-[10px] text-slate-400">· ⏱ {plan.total_time_minutes} min cocinar</span>
+            <span className="text-[10px] text-slate-400">⏱ {plan.total_time_minutes} min cocinar</span>
           )}
           {plan.total_days > 0 && (
             <span className="text-[10px] text-slate-400">· {plan.total_days} días cubiertos</span>
           )}
         </div>
         <h2 className="text-xl font-black text-slate-800 dark:text-white leading-tight">{plan.title}</h2>
+        {plan.description && (
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{plan.description}</p>
+        )}
       </div>
 
       {/* Nutrition summary pills */}
@@ -147,14 +84,42 @@ function MealPrepPlanDetail({ plan }) {
         </div>
       )}
 
-      {/* Recipes */}
-      {plan.recipes?.length > 0 && (
-        <PlanSection icon="🥘" title="Recetas del plan">
-          <div className="space-y-2">
-            {plan.recipes.map((r, i) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-gray-800 last:border-0">
-                <span className="text-sm font-semibold text-slate-800 dark:text-white">{r.name}</span>
-                <span className="text-xs font-bold text-slate-400 shrink-0 ml-2">{r.portions} porciones</span>
+      {/* Days breakdown */}
+      {plan.days?.length > 0 && (
+        <PlanSection icon="🗓️" title="Plan por día">
+          <div className="space-y-3">
+            {plan.days.map((d, i) => (
+              <div key={i} className="rounded-2xl border border-slate-100 dark:border-gray-800 p-3 bg-slate-50 dark:bg-gray-800/40">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span
+                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white"
+                    style={{ background: 'var(--c-primary)' }}
+                  >
+                    {d.day}
+                  </span>
+                  <p className="text-sm font-black text-slate-800 dark:text-white leading-tight">{d.meal}</p>
+                </div>
+                {d.ingredients?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {d.ingredients.map((ing, j) => (
+                      <span
+                        key={j}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white dark:bg-gray-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-gray-600"
+                      >
+                        {ing.name}{ing.amount ? ` · ${ing.amount}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {d.steps?.length > 0 && (
+                  <ol className="mt-2 space-y-1">
+                    {d.steps.map((step, j) => (
+                      <li key={j} className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {j + 1}. {step}
+                      </li>
+                    ))}
+                  </ol>
+                )}
               </div>
             ))}
           </div>
@@ -163,7 +128,7 @@ function MealPrepPlanDetail({ plan }) {
 
       {/* Shopping list */}
       {plan.shopping_list?.length > 0 && (
-        <PlanSection icon="🛒" title="Lista de compras">
+        <PlanSection icon="🛒" title="Lista total de ingredientes">
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             {plan.shopping_list.map((item, i) => (
               <div key={i} className="flex items-baseline gap-1.5 min-w-0">
@@ -175,9 +140,9 @@ function MealPrepPlanDetail({ plan }) {
         </PlanSection>
       )}
 
-      {/* Prep steps */}
+      {/* Batch cooking steps */}
       {plan.prep_plan?.length > 0 && (
-        <PlanSection icon="👨‍🍳" title="Pasos de preparación">
+        <PlanSection icon="👨‍🍳" title="Preparación optimizada">
           <ol className="space-y-2.5">
             {plan.prep_plan.map((step, i) => (
               <li key={i} className="flex gap-3 items-start">
@@ -195,7 +160,7 @@ function MealPrepPlanDetail({ plan }) {
       )}
 
       {/* Storage */}
-      {plan.storage && (
+      {plan.storage && (plan.storage.instructions?.length > 0 || plan.storage.duration_days > 0) && (
         <PlanSection icon="📦" title="Almacenamiento">
           <div className="space-y-1.5">
             {plan.storage.instructions?.map((inst, i) => (
@@ -208,6 +173,15 @@ function MealPrepPlanDetail({ plan }) {
             )}
           </div>
         </PlanSection>
+      )}
+
+      {/* Tip */}
+      {plan.tip && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-3">
+          <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+            💡 {plan.tip}
+          </p>
+        </div>
       )}
     </div>
   );
