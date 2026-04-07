@@ -1,6 +1,54 @@
 import { useEffect } from 'react';
-import { ChevronRight, X } from 'lucide-react';
+import { ChevronRight, RefreshCw, X } from 'lucide-react';
 import { useBottomSheet } from '../hooks/useBottomSheet.js';
+
+// ── Directed-change tweak options ────────────────────────────────────────────
+
+const TWEAK_OPTIONS = [
+  { value: 'mas_proteina',  label: '💪 Más proteína' },
+  { value: 'mas_economico', label: '💸 Más económico' },
+  { value: 'sin_carne',     label: '🥗 Sin carne' },
+  { value: 'mas_rapido',    label: '⚡ Más rápido' },
+  { value: 'mas_fibra',     label: '🌾 Más fibra' },
+];
+
+function TweakBar({ onTweak, tweakingType }) {
+  if (!onTweak) return null;
+  const isBusy = !!tweakingType;
+  return (
+    <div className="rounded-2xl border border-slate-100 dark:border-gray-800 bg-slate-50 dark:bg-gray-800/60 p-3">
+      <p className="text-[11px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-2">
+        Ajustar plan
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {TWEAK_OPTIONS.map(opt => {
+          const isActive = tweakingType === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onTweak(opt.value)}
+              disabled={isBusy}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                isActive
+                  ? 'text-white border-transparent'
+                  : 'bg-white dark:bg-gray-900 border-slate-200 dark:border-gray-700 text-slate-700 dark:text-slate-200 hover:border-slate-300 dark:hover:border-gray-600'
+              }`}
+              style={isActive ? { background: 'var(--c-primary)', borderColor: 'var(--c-primary)' } : {}}
+            >
+              {isActive ? (
+                <span className="flex items-center gap-1.5">
+                  <RefreshCw size={11} className="animate-spin" />
+                  Ajustando...
+                </span>
+              ) : opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ── Result preview card (tap to re-open the generated plan) ──────────────────
 
@@ -49,7 +97,7 @@ function PlanSection({ icon, title, children }) {
   );
 }
 
-function MealPrepPlanDetail({ plan }) {
+function MealPrepPlanDetail({ plan, onTweak, tweakingType }) {
   return (
     <div className="px-5 pb-6 space-y-5">
       {/* Plan header */}
@@ -67,6 +115,9 @@ function MealPrepPlanDetail({ plan }) {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">{plan.description}</p>
         )}
       </div>
+
+      {/* Directed-change tweak chips */}
+      <TweakBar onTweak={onTweak} tweakingType={tweakingType} />
 
       {/* Nutrition summary pills */}
       {plan.nutrition_summary && (
@@ -193,10 +244,12 @@ function MealPrepPlanDetail({ plan }) {
  * MealPrepSheet — displays the full meal prep plan detail.
  *
  * Props:
- *   plan     — plan object (null = closed)
- *   onClose  — called after the close animation
+ *   plan          — plan object (null = closed)
+ *   onClose       — called after the close animation
+ *   onTweak       — (changeType) => void  optional, enables tweak chips
+ *   tweakingType  — currently in-flight tweak type (for loading UI)
  */
-export function MealPrepSheet({ plan, onClose }) {
+export function MealPrepSheet({ plan, onClose, onTweak, tweakingType }) {
   const bs = useBottomSheet({ onClosed: onClose });
 
   // Sync plan prop → open/close
@@ -254,7 +307,7 @@ export function MealPrepSheet({ plan, onClose }) {
 
         {/* Scrollable plan detail */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
-          {plan && <MealPrepPlanDetail plan={plan} />}
+          {plan && <MealPrepPlanDetail plan={plan} onTweak={onTweak} tweakingType={tweakingType} />}
         </div>
 
         {/* Safe-area spacer */}

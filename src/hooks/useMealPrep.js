@@ -24,7 +24,7 @@ function extractJSON(text) {
 // ── Cache key ─────────────────────────────────────────────────────────────────
 
 function makePlanKey(params, profileSlice) {
-  return JSON.stringify({ type: 'mealprep_v3', params, p: profileSlice });
+  return JSON.stringify({ type: 'mealprep_v4', params, p: profileSlice });
 }
 
 // ── Mode → silent guidance for the model ──────────────────────────────────────
@@ -39,12 +39,55 @@ const MODE_GUIDANCE = {
   rapido:         'Minimiza tiempo total y pasos. Recetas que se cocinen rápido y compartan cocción.',
 };
 
+// ── Directed change → silent adjustment guidance ─────────────────────────────
+// Used when the user requests a tweak (e.g. "más proteína") on top of a plan.
+
+export const CHANGE_GUIDANCE = {
+  mas_economico: 'Reemplazar carnes caras por huevo y legumbres. Reducir la variedad de ingredientes.',
+  mas_proteina:  'Aumentar huevo, pollo y legumbres. Mantener todo simple.',
+  sin_carne:     'Eliminar todas las carnes y pescados. Usar legumbres, huevo y lácteos si las preferencias lo permiten.',
+  mas_rapido:    'Reducir pasos y preparaciones distintas. Recetas más rápidas de ejecutar.',
+  mas_fibra:     'Agregar verduras, legumbres y granos integrales.',
+};
+
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildMealPrepPrompt(params, { profileStr, locale, guardrail, superStr }) {
+function summarizePreviousPlan(plan) {
+  if (!plan) return '';
+  const meals = (plan.days || []).map(d => `Día ${d.day}: ${d.meal}`).join(' | ');
+  const ingredients = (plan.shopping_list || []).slice(0, 12).map(i => i.name).filter(Boolean).join(', ');
+  return `- Título: ${plan.title}\n- Comidas: ${meals}\n- Ingredientes principales: ${ingredients}`;
+}
+
+function buildTweakBlock(params, previousPlan) {
+  if (!params.change_type || !previousPlan) return '';
+  const guidance = CHANGE_GUIDANCE[params.change_type] || '';
+  return `
+
+## AJUSTE DIRIGIDO (instrucción interna, NO mencionar al usuario)
+
+Plan actual del usuario:
+${summarizePreviousPlan(previousPlan)}
+
+Tipo de ajuste solicitado: ${params.change_type}
+
+Guía del ajuste:
+${guidance}
+
+Reglas del ajuste:
+- Ajusta el plan en esa dirección manteniendo simplicidad
+- Preserva ingredientes y preparaciones del plan actual cuando sean coherentes con el ajuste
+- NO rehagas todo innecesariamente
+- NO menciones en la respuesta que estás ajustando un plan previo
+- El resultado debe parecer un plan natural y fresco, no una "versión modificada"
+`;
+}
+
+function buildMealPrepPrompt(params, { profileStr, locale, guardrail, superStr }, previousPlan = null) {
   const restrictions = [guardrail, superStr].filter(Boolean).join('\n') || 'Ninguna';
   const dias = params.dias || 3;
   const modeGuidance = MODE_GUIDANCE[params.mode] || MODE_GUIDANCE.rapido;
+  const tweakBlock = buildTweakBlock(params, previousPlan);
 
   return `${locale}
 Actúa como un asistente que toma decisiones por el usuario y resuelve su alimentación sin esfuerzo.
@@ -52,11 +95,12 @@ Actúa como un asistente que toma decisiones por el usuario y resuelve su alimen
 Objetivo: Generar UN plan de meal prep para ${dias} días que minimice esfuerzo, reutilice ingredientes y sea fácil de ejecutar en la vida real, en una sola sesión de cocina (máximo 1–2 horas).
 
 Reglas clave:
-- NO entregues múltiples opciones
+- SIEMPRE entrega UNA sola propuesta (nunca múltiples opciones)
 - NO generes variedad innecesaria
+- PRIORIZA simplicidad y coherencia
 - PRIORIZA reutilización de ingredientes (cocinar una vez, usar varias veces)
-- PRIORIZA simplicidad
 - TODO debe respetar ESTRICTAMENTE las restricciones del usuario (ej: kosher)
+- NO incluyas marcas ni productos comerciales
 - EVITA ingredientes caros o difíciles a menos que el contexto lo justifique
 - Evita ingredientes que se usen solo una vez
 - Si algún ingrediente no cumple restricciones, reemplázalo automáticamente sin mencionarlo
@@ -71,7 +115,7 @@ Nivel de esfuerzo: mínimo
 ## DIRECTRIZ INTERNA (no mencionar al usuario en la respuesta)
 
 ${modeGuidance}
-
+${tweakBlock}
 ## INSTRUCCIONES
 
 1. Genera UN plan para ${dias} días
@@ -125,13 +169,18 @@ function normalizePlan(raw, dias) {
 /**
  * useMealPrep — generates ONE decisive meal prep plan per params combination.
  *
- * - generate(params)   → Promise<Plan | null>
- * - getPlan(params)    → Plan | null  (cached result)
- * - isLoading(params)  → boolean
- * - getError(params)   → string | null
+ * - generate(params, { previousPlan? }) → Promise<Plan | null>
+ * - getPlan(params)                     → Plan | null  (cached result, base only)
+ * - isLoading(params)                   → boolean
+ * - getError(params)                    → string | null
  *
  * Params shape:
- *   { dias: string, mode: 'alto_proteina'|'vegetariano'|'economico'|'alto_en_fibra'|'rapido' }
+ *   { dias: string,
+ *     mode: 'alto_proteina'|'vegetariano'|'economico'|'alto_en_fibra'|'rapido',
+ *     change_type?: 'mas_economico'|'mas_proteina'|'sin_carne'|'mas_rapido'|'mas_fibra' }
+ *
+ * When change_type + previousPlan are provided, the model adjusts the previous
+ * plan in that direction. Tweaks are NOT cached (they depend on the input plan).
  */
 export function useMealPrep() {
   const [plansMap, setPlansMap] = useState({});
@@ -142,15 +191,19 @@ export function useMealPrep() {
 
   const _key = (params) => makePlanKey(params, compactProfile(profile).slice(0, 80));
 
-  const generate = async (params) => {
+  const generate = async (params, { previousPlan } = {}) => {
     const key = _key(params);
+    const isTweak = !!params.change_type && !!previousPlan;
+
     if (activeKeys.has(key)) return null;
 
-    // TTL cache hit → no API call
-    const hit = cache.getCached(key);
-    if (hit) {
-      setPlansMap(m => ({ ...m, [key]: hit }));
-      return hit;
+    // TTL cache hit → no API call (only for base generations, never for tweaks)
+    if (!isTweak) {
+      const hit = cache.getCached(key);
+      if (hit) {
+        setPlansMap(m => ({ ...m, [key]: hit }));
+        return hit;
+      }
     }
 
     setActiveKeys(s => new Set([...s, key]));
@@ -162,7 +215,11 @@ export function useMealPrep() {
       const guardrail = buildAbsoluteGuardrail(profile);
       const superStr = buildSupermarketInstruction(profile);
 
-      const prompt = buildMealPrepPrompt(params, { profileStr, locale, guardrail, superStr });
+      const prompt = buildMealPrepPrompt(
+        params,
+        { profileStr, locale, guardrail, superStr },
+        isTweak ? previousPlan : null
+      );
       const payload = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
@@ -183,7 +240,8 @@ export function useMealPrep() {
       }
 
       const plan = normalizePlan(raw, params.dias);
-      cache.setCache(key, plan);
+      // Only persist base plans — tweaks are transient and depend on a specific input
+      if (!isTweak) cache.setCache(key, plan);
       setPlansMap(m => ({ ...m, [key]: plan }));
       return plan;
     } catch (err) {

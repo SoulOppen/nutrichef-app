@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Flame, Package, RefreshCw, ShoppingBag, Sparkles } from 'lucide-react';
 import RecipeBottomSheet from '../components/RecipeBottomSheet.jsx';
 import { MealPrepResultCard, MealPrepSheet } from '../components/MealPrepPlanCard.jsx';
@@ -195,6 +195,11 @@ export default function CookingHome() {
   const [dias, setDias] = useState('3');
   const [mode, setMode] = useState('rapido');
 
+  // Current displayed meal prep plan — tracks tweaks separately from base cache
+  // so iterative adjustments compound on top of each other
+  const [currentMealPrepPlan, setCurrentMealPrepPlan] = useState(null);
+  const [tweakingType, setTweakingType] = useState(null);
+
   const { generate, getRecipe, isLoading, getError } = useCooking();
   const mealPrep = useMealPrep();
 
@@ -202,6 +207,13 @@ export default function CookingHome() {
   const cookNowParams = { tiempo, dificultad, objetivo: objetivoCook, tipo };
   const ingredientsParams = { ingredientes: ingredientes.trim(), tipo };
   const mealPrepParams = { dias, mode };
+
+  // When base meal prep params change, sync the displayed plan to whatever
+  // the cache has for the new params (or null). Discards any active tweak.
+  useEffect(() => {
+    setCurrentMealPrepPlan(mealPrep.getPlan(mealPrepParams));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dias, mode]);
 
   const toggle = (id) => setActiveCard(prev => (prev === id ? null : id));
 
@@ -217,13 +229,31 @@ export default function CookingHome() {
   };
   const handleMealPrep = async () => {
     const plan = await mealPrep.generate(mealPrepParams);
-    if (plan) setViewingPlan(plan);
+    if (plan) {
+      setCurrentMealPrepPlan(plan);
+      setViewingPlan(plan);
+    }
+  };
+  const handleMealPrepTweak = async (changeType) => {
+    if (!currentMealPrepPlan || tweakingType) return;
+    setTweakingType(changeType);
+    try {
+      const plan = await mealPrep.generate(
+        { ...mealPrepParams, change_type: changeType },
+        { previousPlan: currentMealPrepPlan }
+      );
+      if (plan) {
+        setCurrentMealPrepPlan(plan);
+        setViewingPlan(plan);
+      }
+    } finally {
+      setTweakingType(null);
+    }
   };
 
   // Cached results for current params
   const cookNowRecipe = getRecipe('cookNow', cookNowParams);
   const ingredientsRecipe = getRecipe('ingredients', ingredientsParams);
-  const mealPrepPlan = mealPrep.getPlan(mealPrepParams);
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -328,11 +358,11 @@ export default function CookingHome() {
         subtitle="Cocina una vez, come varios días"
         isOpen={activeCard === 'mealPrep'}
         onToggle={() => toggle('mealPrep')}
-        ctaLabel={mealPrepPlan ? 'Generar nuevo plan' : 'Planificar meal prep'}
+        ctaLabel={currentMealPrepPlan ? 'Generar nuevo plan' : 'Planificar meal prep'}
         onGenerate={handleMealPrep}
         loading={mealPrep.isLoading(mealPrepParams)}
         loadingLabel="Generando plan..."
-        result={mealPrepPlan}
+        result={currentMealPrepPlan}
         resultRenderer={(p) => <MealPrepResultCard plan={p} onView={() => setViewingPlan(p)} />}
       >
         <ChipGroup label="Días a cubrir" options={DIAS_OPTIONS} value={dias} onChange={setDias} />
@@ -356,6 +386,8 @@ export default function CookingHome() {
       <MealPrepSheet
         plan={viewingPlan}
         onClose={() => setViewingPlan(null)}
+        onTweak={handleMealPrepTweak}
+        tweakingType={tweakingType}
       />
     </div>
   );
