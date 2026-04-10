@@ -29,7 +29,7 @@ function loadInitialIntent() {
 // ── Suggested ingredient chips for the "tengo ingredientes" card ─────────────
 
 const SUGGESTED_INGREDIENTS = [
-  'pollo', 'arroz', 'huevo', 'atún', 'pasta', 'tomate', 'cebolla', 'lentejas',
+  'pollo', 'arroz', 'huevo', 'atún', 'pasta', 'tomate',
 ];
 
 // ── Time-of-day bucket (silent meal-type inference for the model) ────────────
@@ -117,8 +117,9 @@ export default function CookingHome() {
     try { localStorage.setItem(INTENT_STORAGE_KEY, intent); } catch { /* ignore */ }
   }, [intent]);
 
-  // Ingredients input
+  // Ingredients input + progressive disclosure
   const [ingredientes, setIngredientes] = useState('');
+  const [ingredientsExpanded, setIngredientsExpanded] = useState(false);
 
   // Currently displayed results — separate from the cache so iterative tweaks compound
   const [currentCookNowRecipe, setCurrentCookNowRecipe] = useState(null);
@@ -273,33 +274,27 @@ export default function CookingHome() {
         <h1 className="text-2xl font-black text-slate-800 dark:text-white">¿Qué te apetece hoy?</h1>
       </header>
 
-      {/* ── 2. Intent chips (single source of truth, persisted) ───────────── */}
-      <nav
-        aria-label="Intención"
-        className="-mx-1 overflow-x-auto scrollbar-none"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-      >
-        <div className="flex gap-2 px-1 pb-1 min-w-max">
-          {INTENT_OPTIONS.map(opt => {
-            const isActive = intent === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setIntent(opt.value)}
-                aria-pressed={isActive}
-                className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-colors border ${
-                  isActive
-                    ? 'text-white border-transparent shadow-sm'
-                    : 'bg-white dark:bg-gray-900 border-slate-200 dark:border-gray-700 text-slate-700 dark:text-slate-200'
-                }`}
-                style={isActive ? { background: 'var(--c-primary)', borderColor: 'var(--c-primary)' } : {}}
-              >
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
+      {/* ── 2. Intent chips (wrapped, no scroll) ──────────────────────────── */}
+      <nav aria-label="Intención" className="flex flex-wrap gap-2">
+        {INTENT_OPTIONS.map(opt => {
+          const isActive = intent === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setIntent(opt.value)}
+              aria-pressed={isActive}
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-colors border ${
+                isActive
+                  ? 'text-white border-transparent shadow-sm'
+                  : 'bg-white dark:bg-gray-900 border-slate-200 dark:border-gray-700 text-slate-700 dark:text-slate-200'
+              }`}
+              style={isActive ? { background: 'var(--c-primary)', borderColor: 'var(--c-primary)' } : {}}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </nav>
 
       {/* ── 3. Action cards (always visible, in priority order) ──────────── */}
@@ -332,42 +327,56 @@ export default function CookingHome() {
         )}
       </ActionCard>
 
-      {/* Card 2: Tengo ingredientes */}
+      {/* Card 2: Tengo ingredientes (progressive disclosure) */}
       <ActionCard
         icon={ShoppingBag}
         title="Tengo ingredientes"
         subtitle="Dime qué tienes y resuelvo el resto"
       >
-        <textarea
-          value={ingredientes}
-          onChange={e => setIngredientes(e.target.value)}
-          placeholder="Ej: pollo, arroz, zanahoria..."
-          rows={2}
-          className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:border-[--c-primary-border] transition-colors"
-        />
+        {/* Collapsed: single tappable trigger */}
+        {!ingredientsExpanded && !ingredientes.trim() && !currentIngredientsRecipe ? (
+          <button
+            type="button"
+            onClick={() => setIngredientsExpanded(true)}
+            className="w-full h-14 flex items-center justify-center gap-2 rounded-2xl text-sm font-bold border-2 border-dashed border-slate-200 dark:border-gray-700 text-slate-500 dark:text-slate-400 active:scale-[0.98] transition-transform"
+          >
+            <Plus size={16} strokeWidth={2.5} /> Agregar ingredientes
+          </button>
+        ) : (
+          <>
+            <textarea
+              value={ingredientes}
+              onChange={e => setIngredientes(e.target.value)}
+              placeholder="Ej: pollo, arroz, zanahoria..."
+              rows={2}
+              className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-gray-700 bg-slate-50 dark:bg-gray-800 text-sm text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:border-[--c-primary-border] transition-colors"
+              autoFocus={ingredientsExpanded && !ingredientes.trim()}
+            />
 
-        {/* Suggested chips for faster input */}
-        <div className="flex flex-wrap gap-1.5">
-          {SUGGESTED_INGREDIENTS.map(item => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => addIngredient(item)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-gray-700 active:scale-95 transition-transform"
+            {/* Suggested chips for faster input */}
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTED_INGREDIENTS.map(item => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => addIngredient(item)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-gray-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-gray-700 active:scale-95 transition-transform"
+                >
+                  <Plus size={11} strokeWidth={3} /> {item}
+                </button>
+              ))}
+            </div>
+
+            <PrimaryButton
+              onClick={handleIngredients}
+              disabled={!ingredientes.trim()}
+              loading={isLoading('ingredients', ingredientsParams)}
+              loadingLabel="Generando receta..."
             >
-              <Plus size={11} strokeWidth={3} /> {item}
-            </button>
-          ))}
-        </div>
-
-        <PrimaryButton
-          onClick={handleIngredients}
-          disabled={!ingredientes.trim()}
-          loading={isLoading('ingredients', ingredientsParams)}
-          loadingLabel="Generando receta..."
-        >
-          {currentIngredientsRecipe ? 'Generar otra receta' : '¿Qué puedo cocinar?'}
-        </PrimaryButton>
+              {currentIngredientsRecipe ? 'Generar otra receta' : '¿Qué puedo cocinar?'}
+            </PrimaryButton>
+          </>
+        )}
 
         {currentIngredientsRecipe && (
           <RecipeResultCard
