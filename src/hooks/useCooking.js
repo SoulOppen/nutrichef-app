@@ -7,6 +7,7 @@ import {
   buildLocaleInstruction,
   buildAbsoluteGuardrail,
   buildSupermarketInstruction,
+  extractJSON,
 } from '../lib/gemini.js';
 
 // ── Stable key per mode + params + profile slice ─────────────────────────────
@@ -32,7 +33,7 @@ function normalizeCookingRecipe(r) {
     prepTime: r.time_minutes ? `${r.time_minutes} min` : '—',
     cookTime: '',
     cuisine: r.tags?.[0] || 'Saludable',
-    servings: '2 porciones',
+    servings: r.servings ? `${r.servings} porciones` : '2 porciones',
     ingredients: (r.ingredients || []).map(ing => {
       const { cantidad, unidad } = parseAmount(ing.amount);
       return {
@@ -61,15 +62,6 @@ function normalizeCookingRecipe(r) {
   };
 }
 
-// ── Extract first JSON object/array from a string ─────────────────────────────
-
-function extractJSON(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return text;
-  return text.slice(start, end + 1);
-}
-
 // ── Intent → silent guidance for the model (never named to the user) ─────────
 
 const INTENT_GUIDANCE = {
@@ -93,7 +85,7 @@ const TIME_GUIDANCE = {
 
 // ── Directed-change guidance for cooking tweaks ──────────────────────────────
 
-export const COOKING_CHANGE_GUIDANCE = {
+const COOKING_CHANGE_GUIDANCE = {
   mas_simple:    'Reducir pasos e ingredientes. Hacerla aún más simple y rápida de ejecutar.',
   mas_economico: 'Reemplazar ingredientes caros por opciones baratas (huevo, legumbres, arroz).',
   mas_proteina:  'Aumentar densidad de proteína (huevo, pollo, legumbres, lácteos).',
@@ -117,23 +109,9 @@ function buildTweakBlock(changeType, previousRecipe) {
   if (!changeType || !previousRecipe) return '';
   const guidance = COOKING_CHANGE_GUIDANCE[changeType] || '';
   return `
-
-## AJUSTE DIRIGIDO (instrucción interna, NO mencionar al usuario)
-
-Receta actual del usuario:
-${summarizePreviousRecipe(previousRecipe)}
-
-Tipo de ajuste: ${changeType}
-
-Guía:
-${guidance}
-
-Reglas del ajuste:
-- Ajusta la receta en esa dirección manteniendo simplicidad
-- Preserva lo que sea coherente con el ajuste
-- NO rehagas todo innecesariamente
-- NO menciones que estás ajustando una receta previa
-- El resultado debe parecer una receta natural y fresca, no una "versión modificada"
+AJUSTE (NO mencionar): ${changeType} — ${guidance}
+Receta previa: ${summarizePreviousRecipe(previousRecipe)}
+Ajustar en esa dirección. Preservar lo coherente. No rehacer todo. Resultado debe parecer fresco.
 `;
 }
 
@@ -149,48 +127,32 @@ function buildPrompt(mode, params, { profileStr, locale, guardrail, superStr }, 
   if (mode === 'cookNow') {
     inputsBlock = '';
   } else if (mode === 'ingredients') {
-    inputsBlock = `\nIngredientes disponibles: ${params.ingredientes}\nUsa SOLO estos ingredientes (más básicos de despensa: sal, aceite, especias). Minimiza ingredientes adicionales.`;
+    inputsBlock = `\nIngredientes disponibles: ${params.ingredientes}\nUsar SOLO estos + básicos de despensa (sal, aceite, especias). Minimizar extras.`;
   } else {
     throw new Error(`useCooking: modo desconocido "${mode}"`);
   }
 
   return `${locale}
-Actúa como un asistente que toma decisiones por el usuario y resuelve qué cocinar sin esfuerzo.
+Resuelve qué cocinar. UNA receta, sin opciones. El usuario NO quiere pensar.
 
-Objetivo: Entregar UNA receta clara y ejecutable, minimizando cualquier esfuerzo mental.
-
-Reglas clave:
-- SIEMPRE entrega UNA sola solución (nunca múltiples opciones)
-- TODO debe ser simple, coherente y accionable
-- Evita ruido, explicaciones largas o información innecesaria
-- NO incluyas marcas ni productos comerciales
-- NUNCA incluyas ingredientes que el usuario quiera evitar (ver "Evitar:" en preferencias). Reemplázalos automáticamente sin mencionarlo.
-- Si algún ingrediente no cumple con las restricciones, reemplázalo automáticamente sin mencionarlo
-
-## CONTEXTO DEL USUARIO
+Reglas:
+- 1 receta simple, coherente, accionable
+- Máx 6–8 ingredientes, máx 5 pasos, lenguaje directo
+- Sin marcas comerciales
+- NUNCA incluir ingredientes de "Evitar:" en preferencias — reemplazar sin mencionar
+- Restricciones absolutas: reemplazar automáticamente sin mencionar
 
 Preferencias: ${profileStr}
-Restricciones dietarias: ${restrictions}${inputsBlock}
+Restricciones: ${restrictions}${inputsBlock}
 
-## DIRECTRIZ INTERNA (no mencionar al usuario)
-
-Intención: ${intentGuidance}
-Momento del día: ${timeGuidance}
-Infiere el tipo de comida apropiado (desayuno / almuerzo / merienda / cena / snack) según la hora y la intención. NO preguntes ni expliques esta inferencia, solo aplícala.
+Directriz interna (NO mencionar al usuario):
+- Intención: ${intentGuidance}
+- Momento: ${timeGuidance}
+- Inferir tipo de comida (desayuno/almuerzo/merienda/cena/snack) según hora + intención. No explicar.
 ${tweakBlock}
-## INSTRUCCIONES
+SOLO JSON, sin texto adicional.
 
-1. Genera UNA receta óptima
-2. Asegúrate de que TODOS los ingredientes respeten las restricciones
-3. Prioriza simplicidad y coherencia
-4. Máximo 6–8 ingredientes
-5. Máximo 5 pasos de preparación, lenguaje directo
-6. Incluye 1 sugerencia útil (tip)
-7. SOLO JSON, sin texto adicional
-
-## FORMATO DE RESPUESTA (JSON OBLIGATORIO)
-
-{"title":"","description":"Por qué es ideal (1 línea corta)","time_minutes":0,"difficulty":"fácil","tags":["tag1"],"nutrition":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[{"name":"","amount":""}],"steps":["Paso 1"],"tip":"1 sugerencia útil"}`;
+{"title":"","description":"Por qué es ideal (1 línea corta)","time_minutes":0,"difficulty":"fácil","servings":2,"tags":["tag1"],"nutrition":{"calories":0,"protein":0,"carbs":0,"fat":0},"ingredients":[{"name":"","amount":""}],"steps":["Paso 1"],"tip":"1 sugerencia útil"}`;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

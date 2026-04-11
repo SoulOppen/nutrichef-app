@@ -16,6 +16,7 @@ const INTENT_OPTIONS = [
   { value: 'snack',     label: '🍎 Snack' },
 ];
 const VALID_INTENTS = new Set(INTENT_OPTIONS.map(o => o.value));
+const MEAL_PREP_INTENTS = new Set(['inspirame', 'proteico', 'liviano', 'economico']);
 const INTENT_STORAGE_KEY = 'nutrichef_cook_intent';
 
 function loadInitialIntent() {
@@ -142,7 +143,8 @@ export default function CookingHome() {
     time_of_day: getTimeOfDay(),
     ingredientes: ingredientes.trim(),
   });
-  const buildMealPrepParams = () => ({ intent });
+  const mealPrepIntent = MEAL_PREP_INTENTS.has(intent) ? intent : 'inspirame';
+  const buildMealPrepParams = () => ({ intent: mealPrepIntent });
 
   // When intent or ingredients change, sync the displayed result to whatever
   // the cache has for the new params (or null). Discards stale tweaks.

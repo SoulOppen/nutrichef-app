@@ -7,6 +7,7 @@ import {
   buildLocaleInstruction,
   buildAbsoluteGuardrail,
   buildSupermarketInstruction,
+  extractJSON,
 } from '../lib/gemini.js';
 
 // Meal prep plans are less volatile than single recipes — cache for 2 hours
@@ -15,19 +16,10 @@ const MEAL_PREP_TTL = 2 * 60 * 60 * 1000;
 // Fixed plan length — the user shouldn't think about this
 const PLAN_DAYS = 3;
 
-// ── JSON extraction ───────────────────────────────────────────────────────────
-
-function extractJSON(text) {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end === -1 || end < start) return text;
-  return text.slice(start, end + 1);
-}
-
 // ── Cache key ─────────────────────────────────────────────────────────────────
 
 function makePlanKey(params, profileSlice) {
-  return JSON.stringify({ type: 'mealprep_v5', params, p: profileSlice });
+  return JSON.stringify({ type: 'mealprep_v6', params, p: profileSlice });
 }
 
 // ── Intent → silent guidance ──────────────────────────────────────────────────
@@ -43,7 +35,7 @@ const INTENT_GUIDANCE = {
 
 // ── Directed change → silent adjustment guidance ─────────────────────────────
 
-export const CHANGE_GUIDANCE = {
+const CHANGE_GUIDANCE = {
   mas_simple:    'Reducir pasos y preparaciones distintas. Plan más rápido y simple de ejecutar.',
   mas_economico: 'Reemplazar carnes caras por huevo y legumbres. Reducir variedad de ingredientes.',
   mas_proteina:  'Aumentar huevo, pollo y legumbres. Mantener todo simple.',
@@ -55,32 +47,19 @@ export const CHANGE_GUIDANCE = {
 
 function summarizePreviousPlan(plan) {
   if (!plan) return '';
-  const meals = (plan.days || []).map(d => `Día ${d.day}: ${d.meal}`).join(' | ');
+  const base = plan.base?.name || '';
+  const uses = (plan.uses || []).map(u => `Día ${u.day}: ${u.meal}`).join(' | ');
   const ingredients = (plan.shopping_list || []).slice(0, 12).map(i => i.name).filter(Boolean).join(', ');
-  return `- Título: ${plan.title}\n- Comidas: ${meals}\n- Ingredientes principales: ${ingredients}`;
+  return `- Título: ${plan.title}\n- Base: ${base}\n- Usos: ${uses}\n- Ingredientes: ${ingredients}`;
 }
 
 function buildTweakBlock(params, previousPlan) {
   if (!params.change_type || !previousPlan) return '';
   const guidance = CHANGE_GUIDANCE[params.change_type] || '';
   return `
-
-## AJUSTE DIRIGIDO (instrucción interna, NO mencionar al usuario)
-
-Plan actual del usuario:
-${summarizePreviousPlan(previousPlan)}
-
-Tipo de ajuste solicitado: ${params.change_type}
-
-Guía del ajuste:
-${guidance}
-
-Reglas del ajuste:
-- Ajusta el plan en esa dirección manteniendo simplicidad
-- Preserva ingredientes y preparaciones del plan actual cuando sean coherentes con el ajuste
-- NO rehagas todo innecesariamente
-- NO menciones en la respuesta que estás ajustando un plan previo
-- El resultado debe parecer un plan natural y fresco, no una "versión modificada"
+AJUSTE (NO mencionar): ${params.change_type} — ${guidance}
+Plan previo: ${summarizePreviousPlan(previousPlan)}
+Ajustar en esa dirección. Preservar lo coherente. No rehacer todo. Resultado debe parecer fresco.
 `;
 }
 
@@ -92,56 +71,30 @@ function buildMealPrepPrompt(params, { profileStr, locale, guardrail, superStr }
   const tweakBlock = buildTweakBlock(params, previousPlan);
 
   return `${locale}
-Actúa como un asistente que toma decisiones por el usuario y resuelve su alimentación sin esfuerzo.
+Resuelve alimentación para ${PLAN_DAYS} días. UNA propuesta, sin opciones. El usuario NO quiere pensar.
 
-Objetivo: Generar UN plan de meal prep para ${PLAN_DAYS} días que minimice esfuerzo, reutilice ingredientes y sea fácil de ejecutar en una sola sesión de cocina (máximo 1–2 horas).
+CONCEPTO CLAVE: UNA preparación base cocinada en 1 sesión (máx 1–2h) → reutilizada en ${PLAN_DAYS} comidas distintas.
+NO generes recetas independientes por día. La base se cocina UNA vez y se varía al servir.
 
-Reglas clave:
-- SIEMPRE entrega UNA sola propuesta (nunca múltiples opciones)
-- NO generes variedad innecesaria
-- PRIORIZA simplicidad y coherencia
-- PRIORIZA reutilización de ingredientes (cocinar una vez, usar varias veces)
-- TODO debe respetar ESTRICTAMENTE las restricciones del usuario (ej: kosher)
-- NO incluyas marcas ni productos comerciales
-- NUNCA incluyas ingredientes que el usuario quiera evitar (ver "Evitar:" en preferencias). Reemplázalos automáticamente sin mencionarlo.
-- EVITA ingredientes caros o difíciles a menos que el contexto lo justifique
-- Evita ingredientes que se usen solo una vez
-- Si algún ingrediente no cumple restricciones, reemplázalo automáticamente sin mencionarlo
-
-## CONTEXTO DEL USUARIO
+Reglas:
+- Mínimos ingredientes, reutilizar al máximo
+- Evitar ingredientes que se usen solo una vez
+- Sin marcas comerciales
+- NUNCA incluir ingredientes de "Evitar:" en preferencias — reemplazar sin mencionar
+- Restricciones absolutas: reemplazar automáticamente sin mencionar
+- Evitar ingredientes caros o difíciles salvo que el contexto lo justifique
 
 Preferencias: ${profileStr}
-Restricciones dietarias: ${restrictions}
-Tiempo disponible: bajo
-Nivel de esfuerzo: mínimo
+Restricciones: ${restrictions}
 
-## DIRECTRIZ INTERNA (no mencionar al usuario en la respuesta)
-
+Directriz interna (NO mencionar):
 ${intentGuidance}
 ${tweakBlock}
-## INSTRUCCIONES
+shopping_list = TODO lo necesario consolidado (base + extras para servir). Sin duplicados.
 
-1. Genera UN plan para ${PLAN_DAYS} días (no preguntes la duración)
-2. Usa la MENOR cantidad de ingredientes posible
-3. Reutiliza preparaciones (ej: cocinar pollo una vez, usarlo en varias comidas)
-4. Evita ingredientes que se usen solo una vez
-5. Mantén recetas simples (máx 5 pasos cada una)
-6. El plan debe poder cocinarse en una sola sesión (máx 1–2 h)
-7. Asegura coherencia nutricional según la directriz interna
-8. NO menciones intenciones, modos, etiquetas ni explicaciones del estilo del plan
-9. SOLO JSON, sin texto adicional
+SOLO JSON, sin texto adicional.
 
-## CAMPOS OBLIGATORIOS DEL JSON
-
-- "title": nombre del plan (corto, claro, sin etiquetas de modo o intención)
-- "description": 1 línea explicando por qué este plan es ideal (simple y directo)
-- "days": array con UNA comida principal por día, cada una con ingredientes y pasos breves
-- "shopping_list": lista total consolidada, sin duplicados, organizada de forma simple
-- "prep_plan": pasos de batch cooking, claros, cortos y numerados
-
-## FORMATO DE RESPUESTA (JSON OBLIGATORIO)
-
-{"title":"","description":"Por qué este plan es ideal (1 línea)","total_days":${PLAN_DAYS},"total_time_minutes":0,"days":[{"day":1,"meal":"","ingredients":[{"name":"","amount":""}],"steps":["Paso 1"]}],"shopping_list":[{"name":"","amount":""}],"prep_plan":["Paso 1 batch cooking"],"storage":{"containers":0,"instructions":["instrucción"],"duration_days":${PLAN_DAYS}},"nutrition_summary":{"daily_calories":0,"daily_protein":0},"tip":"1 sugerencia útil"}`;
+{"title":"Pollo mediterráneo x3","description":"3 días resueltos en 90 min con una sola cocción","total_days":${PLAN_DAYS},"total_time_minutes":90,"base":{"name":"Pollo desmenuzado + arroz + verduras asadas","steps":["Cocinar arroz","Hornear pollo con verduras 40 min","Desmenuzar y dividir en 3 porciones"]},"uses":[{"day":1,"meal":"Bowl caliente","details":"Arroz + pollo + verduras con salsa soja"},{"day":2,"meal":"Ensalada proteica","details":"Pollo frío sobre hojas verdes con vinagreta"},{"day":3,"meal":"Wrap rápido","details":"Tortilla + pollo + verduras + hummus"}}],"shopping_list":[{"name":"pollo","amount":"600g"},{"name":"arroz","amount":"2 tazas"}],"storage":{"containers":3,"instructions":["Refrigerar en recipientes separados"],"duration_days":${PLAN_DAYS}},"nutrition_summary":{"daily_calories":550,"daily_protein":40},"tip":"Congela 1 porción si no la usarás en 2 días"}`;
 }
 
 // ── Normalize plan from Gemini ────────────────────────────────────────────────
@@ -152,14 +105,16 @@ function normalizePlan(raw) {
     description: raw.description || '',
     total_days: raw.total_days || PLAN_DAYS,
     total_time_minutes: raw.total_time_minutes || 0,
-    days: Array.isArray(raw.days) ? raw.days.map((d, i) => ({
-      day: d.day ?? i + 1,
-      meal: d.meal || '',
-      ingredients: Array.isArray(d.ingredients) ? d.ingredients : [],
-      steps: Array.isArray(d.steps) ? d.steps : [],
+    base: {
+      name: raw.base?.name || '',
+      steps: Array.isArray(raw.base?.steps) ? raw.base.steps : [],
+    },
+    uses: Array.isArray(raw.uses) ? raw.uses.map((u, i) => ({
+      day: u.day ?? i + 1,
+      meal: u.meal || '',
+      details: u.details || '',
     })) : [],
     shopping_list: Array.isArray(raw.shopping_list) ? raw.shopping_list : [],
-    prep_plan: Array.isArray(raw.prep_plan) ? raw.prep_plan : [],
     storage: raw.storage || null,
     nutrition_summary: raw.nutrition_summary || null,
     tip: raw.tip || '',
@@ -221,7 +176,7 @@ export function useMealPrep() {
       );
       const payload = {
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
+        generationConfig: { temperature: 0.55, responseMimeType: 'application/json' },
       };
 
       const data = await fetchGeminiContent({ kind: 'text', payload });
@@ -233,7 +188,7 @@ export function useMealPrep() {
       catch { throw new Error('Respuesta inesperada — intenta de nuevo'); }
 
       const raw = parsed?.plan ?? parsed;
-      if (!raw?.title && !Array.isArray(raw?.days)) {
+      if (!raw?.title && !raw?.base) {
         throw new Error('No se generó plan — intenta de nuevo');
       }
 

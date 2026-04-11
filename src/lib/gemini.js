@@ -15,6 +15,14 @@ export const EXPLORE_CACHE_KEY = 'nutrichef_explore_cache';
 export const MEALPLAN_CACHE_KEY = 'nutrichef_mealplan_cache';
 export const SHOPPING_CACHE_KEY = 'nutrichef_shopping_cache';
 
+// ── JSON extraction (shared by cooking/meal-prep hooks) ─────────────────────
+export function extractJSON(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) return text;
+  return text.slice(start, end + 1);
+}
+
 // ── LocalStorage helpers ─────────────────────────────────────────────────────
 export function readStoredJson(key, fallbackValue) {
   if (typeof window === 'undefined') return fallbackValue;
