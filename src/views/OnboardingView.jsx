@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, ChefHat, CheckCircle2, ChevronRight, Target } from 'lucide-react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
 
@@ -47,7 +47,8 @@ function StepHeading({ title, description }) {
 }
 
 export default function OnboardingView() {
-  const { profile, setProfile } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [medicalDisclaimerAccepted, setMedicalDisclaimerAccepted] = useState(

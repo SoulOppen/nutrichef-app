@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ChefHat, RefreshCw, Search, Sparkles, Zap } from 'lucide-react';
 import RecipeModal from '../components/RecipeModal.jsx';
 import FilterSelector from '../components/FilterSelector.jsx';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import {
   buildAbsoluteGuardrail,
@@ -28,7 +30,11 @@ const QUICK_PICKS = POPULAR_RECIPES.slice(0, 6).map(r => ({
 }));
 
 export default function ExploreView() {
-  const { profile, favoriteRecipes, saveGeneratedRecipe } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const favoriteRecipes = useCollectionsStore((s) => s.favoriteRecipes);
+  const rawSave = useCollectionsStore((s) => s.saveGeneratedRecipe);
+  const { user, isLocalMode } = useAuth();
+  const saveGeneratedRecipe = (recipe) => rawSave(recipe, user?.uid ?? null, isLocalMode);
   const { preferences, summaryLines } = useFoodPreferences();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);

@@ -3,7 +3,7 @@ import { CheckCircle2, Globe, LogOut, Monitor, Moon, RefreshCw, ShieldCheck, Sun
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme, THEMES } from '../context/ThemeContext.jsx';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
 import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import { ROUTES } from '../routes/paths.js';
 
@@ -25,7 +25,8 @@ export default function SettingsView() {
   const navigate = useNavigate();
   const { user, isLocalMode, logout, linkToGoogle } = useAuth();
   const { themeId, setTheme, colorMode, setMode } = useTheme();
-  const { profile, setProfile } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
   const { summaryLines } = useFoodPreferences();
   const [linkingGoogle, setLinkingGoogle] = useState(false);
 

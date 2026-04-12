@@ -14,7 +14,8 @@ import SavedMealsPanel from '../components/meal-plan/SavedMealsPanel.jsx';
 import SelectedDayMeals from '../components/meal-plan/SelectedDayMeals.jsx';
 import ShoppingListSection from '../components/meal-plan/ShoppingListSection.jsx';
 import SupplementReminder from '../components/meal-plan/SupplementReminder.jsx';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
 import {
   buildAbsoluteGuardrail,
   buildBudgetOptimizationInstruction,
@@ -100,7 +101,13 @@ function normalizePlanServings(planData) {
 }
 
 export default function MealPlanView() {
-  const { profile, setProfile, setPlan, plan, savedMeals, setSavedMeals, favoriteRecipes } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const plan = useCollectionsStore((s) => s.plan);
+  const setPlan = useCollectionsStore((s) => s.setPlan);
+  const savedMeals = useCollectionsStore((s) => s.savedMeals);
+  const setSavedMeals = useCollectionsStore((s) => s.setSavedMeals);
+  const favoriteRecipes = useCollectionsStore((s) => s.favoriteRecipes);
   const [loading, setLoading] = useState(false);
   const [shoppingList, setShoppingList] = useState(null);
   const [loadingList, setLoadingList] = useState(false);

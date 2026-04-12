@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { useRecipeCache } from './useRecipeCache.js';
 import {
   fetchGeminiContent,
@@ -177,7 +179,10 @@ export function useCooking() {
   const [options, setOptions] = useState({});
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [errors, setErrors] = useState({});
-  const { profile, saveGeneratedRecipe } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const rawSave = useCollectionsStore((s) => s.saveGeneratedRecipe);
+  const { user, isLocalMode } = useAuth();
+  const saveGeneratedRecipe = (recipe) => rawSave(recipe, user?.uid ?? null, isLocalMode);
   const cache = useRecipeCache();
 
   const _makeKey = (mode, params) => makeKey(mode, params, compactProfile(profile).slice(0, 80));

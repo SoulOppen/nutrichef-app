@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Camera, CheckCircle2, ChevronRight, Globe, RefreshCw, Type, X } from 'lucide-react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
 import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../routes/paths.js';
@@ -57,7 +58,9 @@ Devuelve ÚNICAMENTE el JSON válido con este esquema, sin texto adicional:\n${S
 }
 
 export default function AddRecipeView() {
-  const { savedRecipes, setSavedRecipes, profile } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const savedRecipes = useCollectionsStore((s) => s.savedRecipes);
+  const setSavedRecipes = useCollectionsStore((s) => s.setSavedRecipes);
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 

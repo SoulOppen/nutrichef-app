@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
-import { useAppState } from '../context/appState.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { callGeminiAPI } from './gemini.js';
 
 // Campos que indican que el resultado es una receta completa (no sugerencias ni planes)
@@ -14,15 +15,16 @@ function isRecipe(parsed) {
  * si el resultado parece una receta completa.
  */
 export function useGeminiWithSave() {
-  const { saveGeneratedRecipe } = useAppState();
+  const rawSave = useCollectionsStore((s) => s.saveGeneratedRecipe);
+  const { user, isLocalMode } = useAuth();
 
   const callAndSave = useCallback(async (promptText, cacheKey = null, storeCacheKey = null, options = {}) => {
     const result = await callGeminiAPI(promptText, cacheKey, storeCacheKey, options);
     if (result && isRecipe(result)) {
-      await saveGeneratedRecipe(result);
+      await rawSave(result, user?.uid ?? null, isLocalMode);
     }
     return result;
-  }, [saveGeneratedRecipe]);
+  }, [rawSave, user, isLocalMode]);
 
   return callAndSave;
 }

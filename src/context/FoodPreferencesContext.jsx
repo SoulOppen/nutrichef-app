@@ -1,5 +1,5 @@
 import { createContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useAppState } from './appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
 import {
   DEFAULT_FOOD_PREFERENCES,
   FOOD_PREFERENCES_STORAGE_KEY,
@@ -40,7 +40,9 @@ function writeStoredFoodPreferences(preferences) {
 
 export function FoodPreferencesProvider({ children }) {
   const initialStoredPreferences = useRef(readStoredFoodPreferences());
-  const { profile, setProfile, firestoreReady } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const firestoreReady = useProfileStore((s) => s.firestoreReady);
   const [preferences, setPreferencesState] = useState(
     () => initialStoredPreferences.current || DEFAULT_FOOD_PREFERENCES
   );

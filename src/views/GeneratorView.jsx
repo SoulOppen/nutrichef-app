@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Apple, Camera, ChefHat, ChevronRight, Flame, PiggyBank, RefreshCw, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import RecipeModal from '../components/RecipeModal.jsx';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
 import { useFoodPreferences } from '../hooks/useFoodPreferences.js';
 import {
   buildAbsoluteGuardrail,
@@ -95,7 +96,9 @@ const COMPLEXITY_LEVELS = [
 
 export default function GeneratorView() {
   const navigate = useNavigate();
-  const { profile, setProfile, favoriteRecipes } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const favoriteRecipes = useCollectionsStore((s) => s.favoriteRecipes);
   const { preferences, summaryLines } = useFoodPreferences();
   const [ingredients, setIngredients] = useState('');
   const [dishType, setDishType] = useState('Plato Principal (Salado)');

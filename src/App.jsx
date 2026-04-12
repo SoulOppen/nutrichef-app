@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { ChefHat } from 'lucide-react';
-import { AppStateProvider, isProfileComplete } from './context/AppStateContext.jsx';
+import { isProfileComplete } from './stores/useProfileStore.js';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { FoodPreferencesProvider } from './context/FoodPreferencesContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 import { ROUTES } from './routes/paths.js';
-import { useAppState } from './context/appState.js';
+import { useProfileStore } from './stores/useProfileStore.js';
+import { useSyncStore } from './stores/useSyncStore.js';
 
 const AppLayout = lazy(() => import('./components/layout/AppLayout.jsx'));
 const CookingHome = lazy(() => import('./views/CookingHome.jsx'));
@@ -48,7 +49,8 @@ function RouteLoadingScreen() {
 }
 
 function OnboardingGuard({ children }) {
-  const { profile, firestoreReady } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const firestoreReady = useProfileStore((s) => s.firestoreReady);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -73,36 +75,37 @@ function AppRoutes() {
     );
   }
 
+  // Zustand sync — replaces AppStateProvider
+  useSyncStore();
+
   return (
-    <AppStateProvider>
-      <FoodPreferencesProvider>
-        <Suspense fallback={<RouteLoadingScreen />}>
-          <Routes>
-            <Route path={ROUTES.onboarding} element={<OnboardingView />} />
-            <Route
-              path={ROUTES.home}
-              element={
-                <OnboardingGuard>
-                  <AppLayout />
-                </OnboardingGuard>
-              }
-            >
-              <Route index element={<Navigate to={ROUTES.cook} replace />} />
-              <Route path={ROUTES.cook.slice(1)} element={<CookingHome />} />
-              <Route path={ROUTES.create.slice(1)} element={<GeneratorView />} />
-              <Route path={ROUTES.explore.slice(1)} element={<ExploreView />} />
-              <Route path={ROUTES.saved.slice(1)} element={<SavedView />} />
-              <Route path={ROUTES.plan.slice(1)} element={<MealPlanView />} />
-              <Route path={ROUTES.profile.slice(1)} element={<ProfileView />} />
-              <Route path={ROUTES.preferences.slice(1)} element={<FoodPreferencesScreen />} />
-              <Route path={ROUTES.settings.slice(1)} element={<SettingsView />} />
-              <Route path="add-recipe" element={<AddRecipeView />} />
-              <Route path="*" element={<Navigate to={ROUTES.cook} replace />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </FoodPreferencesProvider>
-    </AppStateProvider>
+    <FoodPreferencesProvider>
+      <Suspense fallback={<RouteLoadingScreen />}>
+        <Routes>
+          <Route path={ROUTES.onboarding} element={<OnboardingView />} />
+          <Route
+            path={ROUTES.home}
+            element={
+              <OnboardingGuard>
+                <AppLayout />
+              </OnboardingGuard>
+            }
+          >
+            <Route index element={<Navigate to={ROUTES.cook} replace />} />
+            <Route path={ROUTES.cook.slice(1)} element={<CookingHome />} />
+            <Route path={ROUTES.create.slice(1)} element={<GeneratorView />} />
+            <Route path={ROUTES.explore.slice(1)} element={<ExploreView />} />
+            <Route path={ROUTES.saved.slice(1)} element={<SavedView />} />
+            <Route path={ROUTES.plan.slice(1)} element={<MealPlanView />} />
+            <Route path={ROUTES.profile.slice(1)} element={<ProfileView />} />
+            <Route path={ROUTES.preferences.slice(1)} element={<FoodPreferencesScreen />} />
+            <Route path={ROUTES.settings.slice(1)} element={<SettingsView />} />
+            <Route path="add-recipe" element={<AddRecipeView />} />
+            <Route path="*" element={<Navigate to={ROUTES.cook} replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </FoodPreferencesProvider>
   );
 }
 

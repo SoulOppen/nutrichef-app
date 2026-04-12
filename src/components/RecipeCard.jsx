@@ -20,7 +20,8 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
 import { refineRecipe, extractDislikedIngredient } from '../lib/gemini.js';
 import { BRAND_LABELS, getRelevantBrandCategories, SAFE_BRANDS, normalizeAndFilterBrandsForProfile } from '../lib/brandDatabase.js';
 import { annotateRecipeIngredients, normalizeIngredientEntry } from '../lib/ingredientIntelligence.js';
@@ -246,7 +247,12 @@ function BrandSuggestions({ brands }) {
 }
 
 function AdjustPanel({ recipe, onRefined, onClose, initialInstruction = '' }) {
-  const { addDislike, refineGeneratedRecipe } = useAppState();
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const addDislike = (item) => setProfile((p) => ({
+    ...p,
+    dislikes: p.dislikes?.includes(item) ? p.dislikes : [...(p.dislikes || []), item],
+  }));
+  const refineGeneratedRecipe = () => {}; // no-op — legacy dead code
   const [instruction, setInstruction] = useState(initialInstruction);
   const [loading, setLoading] = useState(false);
 
@@ -381,16 +387,14 @@ function parseTotalWeightGrams(ingredients = []) {
 }
 
 export default function RecipeCard({ recipe: initialRecipe, onRecipeChange }) {
-  const {
-    profile,
-    setProfile,
-    savedMeals,
-    setSavedMeals,
-    favoriteRecipes,
-    setFavoriteRecipes,
-    interestedRecipes,
-    setInterestedRecipes,
-  } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
+  const savedMeals = useCollectionsStore((s) => s.savedMeals);
+  const setSavedMeals = useCollectionsStore((s) => s.setSavedMeals);
+  const favoriteRecipes = useCollectionsStore((s) => s.favoriteRecipes);
+  const setFavoriteRecipes = useCollectionsStore((s) => s.setFavoriteRecipes);
+  const interestedRecipes = useCollectionsStore((s) => s.interestedRecipes);
+  const setInterestedRecipes = useCollectionsStore((s) => s.setInterestedRecipes);
 
   const [recipe, setRecipe] = useState(initialRecipe);
   const [showAdjust, setShowAdjust] = useState(false);

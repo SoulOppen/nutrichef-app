@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
 import { useRecipeCache } from './useRecipeCache.js';
 import {
   fetchGeminiContent,
@@ -141,7 +141,7 @@ export function useMealPrep() {
   const [plansMap, setPlansMap] = useState({});
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [errors, setErrors] = useState({});
-  const { profile } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
   const cache = useRecipeCache(MEAL_PREP_TTL);
 
   const _key = (params) => makePlanKey(params, compactProfile(profile).slice(0, 80));

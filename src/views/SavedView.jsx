@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Bookmark, Bot, Clock, Heart, Settings2 } from 'lucide-react';
 import RecipeModal from '../components/RecipeModal.jsx';
-import { useAppState } from '../context/appState.js';
+import { useCollectionsStore } from '../stores/useCollectionsStore.js';
 
 function RecipeCard_Mini({ rec, onSelect }) {
   return (
@@ -53,7 +53,9 @@ const TABS = [
 ];
 
 export default function SavedView() {
-  const { favoriteRecipes, interestedRecipes, generatedRecipes } = useAppState();
+  const favoriteRecipes = useCollectionsStore((s) => s.favoriteRecipes);
+  const interestedRecipes = useCollectionsStore((s) => s.interestedRecipes);
+  const generatedRecipes = useCollectionsStore((s) => s.generatedRecipes);
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [tab, setTab] = useState('favorites');
 

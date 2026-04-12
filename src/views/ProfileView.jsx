@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Apple, BookOpen, CheckCircle2, ChevronDown, ChevronUp, Dumbbell, HeartPulse, Lock, Moon, PiggyBank, RefreshCw, ShoppingBag, Star, Target, Trophy } from 'lucide-react';
-import { useAppState } from '../context/appState.js';
+import { useProfileStore } from '../stores/useProfileStore.js';
 import { calculateTDEE, getSupermarketsForCountry } from '../lib/gemini.js';
 import { mergeUniqueTerms } from '../lib/ingredientIntelligence.js';
 
@@ -35,7 +35,8 @@ const ALLERGY_META = {
 };
 
 export default function ProfileView() {
-  const { profile, setProfile } = useAppState();
+  const profile = useProfileStore((s) => s.profile);
+  const setProfile = useProfileStore((s) => s.setProfile);
   const [dislikeInput, setDislikeInput] = useState('');
   const [otherAllergyInput, setOtherAllergyInput] = useState('');
   const [openSections, setOpenSections] = useState({ biometry: true, diet: true, shopping: false });
