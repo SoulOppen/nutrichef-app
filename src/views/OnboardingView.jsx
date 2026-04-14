@@ -11,23 +11,34 @@ const GOAL_OPTIONS = [
   { value: 'Comer más saludable general', label: 'Comer más sano', emoji: '🥗' },
 ];
 
-// Dietas que funcionan como guardrail absoluto (religiosas o éticas estrictas)
-const SAFETY_DIETS = [
-  'Ninguna',
-  'Kosher',
-  'Halal',
-  'Vegano',
-  'Vegetariana',
-  'Hindú (Sin carne de res)',
-  'Jainista',
+// Estilo alimentario (dietaryStyle) — ética/preferencia personal
+const DIETARY_STYLES = [
+  { value: 'Ninguna', label: 'Ninguna' },
+  { value: 'Vegetariana', label: 'Vegetariana' },
+  { value: 'Vegano', label: 'Vegano' },
+  { value: 'Pescetariana', label: 'Pescetariana' },
+];
+
+// Dieta religiosa (religiousDiet) — restricción estricta
+const RELIGIOUS_DIETS = [
+  { value: 'Ninguna', label: 'Ninguna' },
+  { value: 'Kosher', label: 'Kosher' },
+  { value: 'Halal', label: 'Halal' },
+  { value: 'Hindú (Sin carne de res)', label: 'Hindú (Sin carne de res)' },
+  { value: 'Jainista', label: 'Jainista' },
 ];
 
 const COMMON_ALLERGIES = [
-  'Sin Gluten',
-  'Sin Lácteos',
-  'Alergia al Maní',
-  'Alergia a Mariscos',
-  'Sin Soya',
+  { value: 'Alergia al Maní', label: 'Maní (cacahuete)' },
+  { value: 'Alergia a Frutos Secos', label: 'Frutos secos (nuez, almendra...)' },
+  { value: 'Alergia al Huevo', label: 'Huevo' },
+  { value: 'Alergia a Mariscos', label: 'Mariscos (camarón, cangrejo...)' },
+  { value: 'Alergia al Pescado', label: 'Pescado' },
+  { value: 'Sin Lácteos', label: 'Lácteos (leche, queso...)' },
+  { value: 'Sin Gluten', label: 'Gluten (celiaquía)' },
+  { value: 'Sin Soya', label: 'Soya / Soja' },
+  { value: 'Alergia al Sésamo', label: 'Sésamo (ajonjolí)' },
+  { value: 'Alergia al Trigo', label: 'Trigo' },
 ];
 
 const STEPS = [
@@ -51,8 +62,14 @@ export default function OnboardingView() {
   const setProfile = useProfileStore((s) => s.setProfile);
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [medicalDisclaimerAccepted, setMedicalDisclaimerAccepted] = useState(
-    Boolean(profile.medicalDisclaimerAccepted)
+  const [medicalDisclaimerAccepted, setMedicalDisclaimerAccepted] = useState(false);
+
+  // Local draft state — committed to the store only on finish
+  const [selectedGoal, setSelectedGoal] = useState(profile.goals || 'Mantenimiento y energia');
+  const [selectedDietaryStyle, setSelectedDietaryStyle] = useState(profile.dietaryStyle || 'Ninguna');
+  const [selectedReligiousDiet, setSelectedReligiousDiet] = useState(profile.religiousDiet || 'Ninguna');
+  const [selectedAllergies, setSelectedAllergies] = useState(
+    Array.isArray(profile.allergies) ? profile.allergies : []
   );
 
   const currentStep = STEPS[step];
@@ -62,17 +79,20 @@ export default function OnboardingView() {
   const prev = () => setStep(current => Math.max(current - 1, 0));
 
   const toggleAllergy = (item) =>
-    setProfile(current => ({
-      ...current,
-      allergies: current.allergies.includes(item)
-        ? current.allergies.filter(entry => entry !== item)
-        : [...current.allergies, item],
-    }));
+    setSelectedAllergies(current =>
+      current.includes(item)
+        ? current.filter(entry => entry !== item)
+        : [...current, item]
+    );
 
   const finish = () => {
     if (!medicalDisclaimerAccepted) return;
     setProfile(current => ({
       ...current,
+      goals: selectedGoal,
+      dietaryStyle: selectedDietaryStyle,
+      religiousDiet: selectedReligiousDiet,
+      allergies: selectedAllergies,
       medicalDisclaimerAccepted: true,
       acceptedAt: new Date().toISOString(),
     }));
@@ -127,9 +147,9 @@ export default function OnboardingView() {
             {GOAL_OPTIONS.map(option => (
               <button
                 key={option.value}
-                onClick={() => setProfile(current => ({ ...current, goals: option.value }))}
+                onClick={() => setSelectedGoal(option.value)}
                 className={`w-full rounded-2xl border-2 p-4 text-left transition-all ${
-                  profile.goals === option.value
+                  selectedGoal === option.value
                     ? 'border-[--c-primary] bg-[--c-primary-light] text-[--c-primary-text]'
                     : 'border-slate-200 bg-white text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-200'
                 }`}
@@ -137,7 +157,7 @@ export default function OnboardingView() {
                 <span className="flex items-center gap-3">
                   <span className="text-2xl">{option.emoji}</span>
                   <span className="flex-1 text-base font-semibold">{option.label}</span>
-                  {profile.goals === option.value && (
+                  {selectedGoal === option.value && (
                     <CheckCircle2 size={16} style={{ color: 'var(--c-primary)' }} />
                   )}
                 </span>
@@ -148,34 +168,61 @@ export default function OnboardingView() {
       );
     }
 
-    // ── Paso 3: Filtros de Seguridad (dieta estricta + alergias) ─────────
+    // ── Paso 3: Filtros de Seguridad (dieta + religión + alergias) ──────
     if (currentStep.id === 'safety') {
       return (
         <div className="space-y-5">
           <StepHeading
             title="Filtros de Seguridad"
-            description="¿Tienes alguna restricción inquebrantable o alergia? Si no tienes, sáltate este paso."
+            description="¿Tienes alguna restricción o alergia? Si no tienes, sáltate este paso."
           />
 
-          {/* Dieta religiosa o estricta */}
+          {/* Estilo alimentario */}
           <div className="space-y-2">
             <p className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Dieta religiosa o estricta
+              Estilo alimentario
             </p>
             <div className="grid grid-cols-2 gap-2">
-              {SAFETY_DIETS.map(option => (
+              {DIETARY_STYLES.map(option => (
                 <button
-                  key={option}
-                  onClick={() => setProfile(current => ({ ...current, religiousDiet: option }))}
-                  className={`min-h-[56px] rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-semibold transition-all ${
-                    profile.religiousDiet === option
+                  key={option.value}
+                  onClick={() => setSelectedDietaryStyle(option.value)}
+                  className={`min-h-[48px] rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-semibold transition-all ${
+                    selectedDietaryStyle === option.value
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-200'
+                      : 'border-slate-200 bg-white text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-1">
+                    <span className="leading-tight">{option.label}</span>
+                    {selectedDietaryStyle === option.value && (
+                      <CheckCircle2 size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dieta religiosa */}
+          <div className="space-y-2">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Dieta religiosa
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {RELIGIOUS_DIETS.map(option => (
+                <button
+                  key={option.value}
+                  onClick={() => setSelectedReligiousDiet(option.value)}
+                  className={`min-h-[48px] rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-semibold transition-all ${
+                    selectedReligiousDiet === option.value
                       ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
                       : 'border-slate-200 bg-white text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-200'
                   }`}
                 >
                   <span className="flex items-center justify-between gap-1">
-                    <span className="leading-tight">{option}</span>
-                    {profile.religiousDiet === option && (
+                    <span className="leading-tight">{option.label}</span>
+                    {selectedReligiousDiet === option.value && (
                       <CheckCircle2 size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
                     )}
                   </span>
@@ -184,25 +231,28 @@ export default function OnboardingView() {
             </div>
           </div>
 
-          {/* Alergias comunes */}
+          {/* Alergias e intolerancias */}
           <div className="space-y-2">
             <p className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Alergias comunes
+              Alergias e intolerancias
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              Selecciona todas las que apliquen. La IA nunca usará estos ingredientes.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {COMMON_ALLERGIES.map(option => (
                 <button
-                  key={option}
-                  onClick={() => toggleAllergy(option)}
-                  className={`min-h-[56px] rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-semibold transition-all ${
-                    profile.allergies.includes(option)
+                  key={option.value}
+                  onClick={() => toggleAllergy(option.value)}
+                  className={`min-h-[48px] rounded-2xl border-2 px-3 py-2.5 text-left text-sm font-semibold transition-all ${
+                    selectedAllergies.includes(option.value)
                       ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-700 dark:bg-red-900/30 dark:text-red-200'
                       : 'border-slate-200 bg-white text-slate-700 dark:border-gray-700 dark:bg-gray-800 dark:text-slate-200'
                   }`}
                 >
                   <span className="flex items-center justify-between gap-1">
-                    <span className="leading-tight">{option}</span>
-                    {profile.allergies.includes(option) && (
+                    <span className="leading-tight">{option.label}</span>
+                    {selectedAllergies.includes(option.value) && (
                       <CheckCircle2 size={14} className="shrink-0 text-red-500 dark:text-red-400" />
                     )}
                   </span>
@@ -228,7 +278,7 @@ export default function OnboardingView() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white px-6 py-6 dark:from-slate-950 dark:to-slate-900">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col justify-center">
+      <div className={`mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col ${currentStep.id === 'safety' ? 'justify-start pt-4' : 'justify-center'}`}>
 
         {/* Barra de progreso */}
         <div className="mb-6">

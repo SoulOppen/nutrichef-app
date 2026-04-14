@@ -4,7 +4,8 @@
       "Bash(du -sh /tmp/*)",
       "Bash(find /tmp -name \"*.tmp\" -type f -delete)",
       "Bash(npm run:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

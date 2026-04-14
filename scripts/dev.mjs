@@ -9,7 +9,7 @@ const viteBin = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js');
 
 const children = [
   spawn(process.execPath, ['server.js'], { cwd: rootDir, stdio: 'inherit' }),
-  spawn(process.execPath, [viteBin, '--configLoader', 'native'], { cwd: rootDir, stdio: 'inherit' }),
+  spawn(process.execPath, [viteBin], { cwd: rootDir, stdio: 'inherit' }),
 ];
 
 let shuttingDown = false;
