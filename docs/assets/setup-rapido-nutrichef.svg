@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
   <title id="title">Setup rápido de NutriChef IA</title>
-  <desc id="desc">Guía visual de instalación, configuración y ejecución local.</desc>
+  <desc id="desc">Guía visual para instalación, entorno y ejecución local.</desc>
   <defs>
     <style>
       .bg { fill: #f8fafc; }
       .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
       .head { font: 700 24px Arial, sans-serif; fill: #0f172a; }
-      .code { font: 600 19px "Consolas", "Courier New", monospace; fill: #0f172a; }
+      .code { font: 600 19px Consolas, "Courier New", monospace; fill: #0f172a; }
       .note { font: 500 17px Arial, sans-serif; fill: #334155; }
     </style>
   </defs>
@@ -38,5 +38,5 @@
 
   <rect x="50" y="520" width="1100" height="120" rx="18" fill="#e2e8f0" stroke="#64748b" stroke-width="2"/>
   <text class="head" x="80" y="566">Producción</text>
-  <text class="code" x="80" y="608">npm run build   &amp;&amp;   npm run start</text>
+  <text class="code" x="80" y="608">npm run build  &amp;&amp;  npm run start</text>
 </svg>
