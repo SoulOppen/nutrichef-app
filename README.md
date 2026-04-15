@@ -13,15 +13,15 @@ Aplicación web para generar recetas, planes de comida y listas de compra person
 
 ### Arquitectura general
 
-![Arquitectura NutriChef IA](docs/assets/arquitectura-nutrichef.jpg)
+![Arquitectura NutriChef IA](docs/assets/arquitectura-nutrichef.svg)
 
 ### Flujo principal de usuario
 
-![Flujo principal de usuario](docs/assets/flujo-usuario-nutrichef.jpg)
+![Flujo principal de usuario](docs/assets/flujo-usuario-nutrichef.svg)
 
 ### Setup rápido
 
-![Setup rápido de NutriChef IA](docs/assets/setup-rapido-nutrichef.jpg)
+![Setup rápido de NutriChef IA](docs/assets/setup-rapido-nutrichef.svg)
 
 ## Funcionalidades principales
 
