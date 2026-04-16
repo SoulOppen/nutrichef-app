@@ -1,3 +1,5 @@
+'use client';
+
 import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { ChefHat } from 'lucide-react';
