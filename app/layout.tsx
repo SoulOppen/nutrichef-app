@@ -1,5 +1,6 @@
 import './globals.css';
 import type { ReactNode } from 'react';
+import ClientProviders from './ClientProviders';
 
 export const metadata = {
   title: 'NutriChef IA',
@@ -9,7 +10,9 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <ClientProviders>{children}</ClientProviders>
+      </body>
     </html>
   );
 }
