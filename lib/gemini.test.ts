@@ -1,6 +1,24 @@
-import { describe, expect, it } from 'vitest';
+/** @vitest-environment jsdom */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { calculateTDEE, extractJSON, sanitizeUserInput } from './gemini.js';
+import {
+  buildTimeConstraint,
+  calculateTDEE,
+  detectSearchIntent,
+  extractDislikedIngredient,
+  extractJSON,
+  formatCurrencyByCountry,
+  GEMINI_COOLDOWN_KEY,
+  GENERATOR_SUGGESTIONS_CACHE_KEY,
+  getCacheEntry,
+  getCooldownMessage,
+  getCurrencyForCountry,
+  getCurrentSeasonForCountry,
+  getGeminiCooldownUntil,
+  sanitizeUserInput,
+  setCacheEntry,
+  setGeminiCooldownUntil,
+} from './gemini.js';
 
 describe('sanitizeUserInput', () => {
   it('devuelve cadena vacía si no es string', () => {
@@ -65,6 +83,112 @@ describe('calculateTDEE', () => {
       goals: 'Déficit',
     });
     expect(deficit!.calories).toBeLessThan(mant!.calories);
+  });
+});
+
+describe('getCooldownMessage', () => {
+  it('indica al menos 1 min cuando el cooldown ya pasó', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'));
+    expect(getCooldownMessage(Date.now() - 60_000)).toMatch(/1 min/);
+    vi.useRealTimers();
+  });
+
+  it('redondea hacia arriba los minutos restantes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-01T12:00:00Z'));
+    const until = Date.now() + 125_000;
+    expect(getCooldownMessage(until)).toMatch(/3 min/);
+    vi.useRealTimers();
+  });
+});
+
+describe('cooldown y caché (localStorage)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('getGeminiCooldownUntil y setGeminiCooldownUntil persisten la marca de tiempo', () => {
+    expect(getGeminiCooldownUntil()).toBe(0);
+    setGeminiCooldownUntil(4242);
+    expect(localStorage.getItem(GEMINI_COOLDOWN_KEY)).toBeTruthy();
+    expect(getGeminiCooldownUntil()).toBe(4242);
+  });
+
+  it('setCacheEntry y getCacheEntry leen y escriben dentro de una clave de caché', () => {
+    setCacheEntry(GENERATOR_SUGGESTIONS_CACHE_KEY, 'k1', { a: 1 });
+    expect(getCacheEntry(GENERATOR_SUGGESTIONS_CACHE_KEY, 'k1')).toEqual({ a: 1 });
+    expect(getCacheEntry(GENERATOR_SUGGESTIONS_CACHE_KEY, 'missing')).toBeNull();
+  });
+});
+
+describe('getCurrencyForCountry / formatCurrencyByCountry', () => {
+  it('resuelve moneda conocida y usa USD por defecto para país desconocido', () => {
+    expect(getCurrencyForCountry('Chile').code).toBe('CLP');
+    expect(getCurrencyForCountry('Atlantis').code).toBe('USD');
+  });
+
+  it('formatea importe en moneda local', () => {
+    const s = formatCurrencyByCountry(1500, 'Chile');
+    expect(s).toMatch(/1/);
+    expect(s).toMatch(/500|1\.500/);
+  });
+});
+
+describe('getCurrentSeasonForCountry', () => {
+  it('hemisferio sur: junio es invierno en Chile', () => {
+    const d = new Date(2026, 5, 10);
+    expect(getCurrentSeasonForCountry('Chile', d)).toBe('invierno');
+  });
+
+  it('hemisferio norte: junio es verano', () => {
+    const d = new Date(2026, 5, 10);
+    expect(getCurrentSeasonForCountry('España', d)).toBe('verano');
+  });
+});
+
+describe('buildTimeConstraint', () => {
+  it('devuelve cadena vacía sin límite o none', () => {
+    expect(buildTimeConstraint('')).toBe('');
+    expect(buildTimeConstraint('none')).toBe('');
+  });
+
+  it('incluye minutos y pautas para 15 y 30', () => {
+    expect(buildTimeConstraint('15')).toContain('15 minutos');
+    expect(buildTimeConstraint('15')).toMatch(/horneado|marinados/i);
+    expect(buildTimeConstraint('30')).toMatch(/marinados|horneados/i);
+  });
+});
+
+describe('detectSearchIntent', () => {
+  it('vacío o solo espacios → creative', () => {
+    expect(detectSearchIntent('')).toBe('creative');
+    expect(detectSearchIntent('   ')).toBe('creative');
+  });
+
+  it('señal literal sin creativa → literal', () => {
+    expect(detectSearchIntent('pollo al horno con limón')).toBe('literal');
+  });
+
+  it('señal creativa gana sobre literal', () => {
+    expect(detectSearchIntent('ideas para cenar al horno')).toBe('creative');
+  });
+
+  it('consultas muy cortas → literal', () => {
+    expect(detectSearchIntent('arroz con leche')).toBe('literal');
+  });
+});
+
+describe('extractDislikedIngredient', () => {
+  it('extrae ingrediente tras sin / no me gusta / reemplaza', () => {
+    expect(extractDislikedIngredient('sin cebolla por favor')).toBe('cebolla');
+    expect(extractDislikedIngredient('no me gusta el cilantro')).toBe('cilantro');
+    expect(extractDislikedIngredient('reemplaza la nata por yogur')).toBe('nata');
+  });
+
+  it('devuelve null sin texto reconocible', () => {
+    expect(extractDislikedIngredient('')).toBeNull();
+    expect(extractDislikedIngredient('solo sal')).toBeNull();
   });
 });
 
