@@ -31,6 +31,12 @@ export default function PrivateLayout({ children }: { children: ReactNode }) {
   if (user === undefined && !isLocalMode) return <SplashScreen />;
   if (user === null && !isLocalMode) return <LoginView />;
 
+  const sessionActive = Boolean(user) || isLocalMode;
+  if (sessionActive && !firestoreReady) return <SplashScreen />;
+  if (sessionActive && firestoreReady && !isProfileComplete(profile)) {
+    return <SplashScreen />;
+  }
+
   return (
     <FoodPreferencesProvider>
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans pb-28 md:pb-12 transition-colors duration-200">

@@ -13,7 +13,7 @@ export function useRedirectIfAuthenticated(
 
   useEffect(() => {
     if (user || isLocalMode) {
-      router.replace(ROUTES.cook);
+      router.replace(ROUTES.onboarding);
     }
   }, [user, isLocalMode, router]);
 }

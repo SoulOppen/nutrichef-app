@@ -14,7 +14,7 @@ export default function Page() {
     if (user === undefined && !isLocalMode) return;
 
     if ((user && !isLocalMode) || isLocalMode) {
-      router.replace(ROUTES.cook);
+      router.replace(ROUTES.onboarding);
       return;
     }
 

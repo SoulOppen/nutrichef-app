@@ -21,8 +21,12 @@ export function useOnboardingGate() {
     }
   }, [firestoreReady, profile, router]);
 
+  const authLoading = user === undefined && !isLocalMode;
+  const syncLoading = (user != null || isLocalMode) && !firestoreReady;
+  const redirectingToCook = firestoreReady && isProfileComplete(profile);
+
   return {
-    showSplash: user === undefined && !isLocalMode,
+    showSplash: authLoading || syncLoading || redirectingToCook,
     showLogin: user === null && !isLocalMode,
   };
 }
