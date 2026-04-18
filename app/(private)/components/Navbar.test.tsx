@@ -59,7 +59,7 @@ vi.mock('@/context/ConfirmDialogContext', () => ({
 }));
 
 import { ROUTES } from '@/lib/routes.js';
-import Navbar from './Navbar.jsx';
+import Navbar from './Navbar';
 
 describe('Navbar', () => {
   beforeEach(() => {

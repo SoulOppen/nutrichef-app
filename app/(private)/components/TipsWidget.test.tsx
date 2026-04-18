@@ -2,7 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import TipsWidget from './TipsWidget.jsx';
+import TipsWidget from './TipsWidget';
 
 describe('TipsWidget', () => {
   it('abre el panel al pulsar el botón flotante y muestra el tip del día', () => {

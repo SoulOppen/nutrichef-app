@@ -18,9 +18,9 @@ El orquestador coordina trabajo entre tareas, agentes especializados y validacio
 
 Este repositorio se considera orientado a:
 
-- Next.js App Router (carpeta `app/`)
+- Next.js App Router (carpeta `app/`)s
 - React (componentes server/client)
-- TypeScript
+- Todo archivo tiene que ser de TypeScript
 
 Toda decision de estructura debe respetar convenciones de App Router antes de introducir capas adicionales.
 
@@ -46,6 +46,7 @@ Toda decision de estructura debe respetar convenciones de App Router antes de in
 - No crear capa `view` por defecto si `page.tsx` ya representa la ruta.
 - Solo crear una abstraccion adicional cuando exista una responsabilidad clara y reutilizable (no por costumbre).
 - Si una pagina crece o mezcla responsabilidades, extraer UI/logica de presentacion a `app/{segment}/components/*`.
+- **Componentes en `app/` (tamaño y responsabilidades):** preferir **un componente React por archivo** (default o named); datos y funciones puras en `constants.ts`, `*.Data.ts/js` o `*.helpers.ts/js`; estado y efectos de UI en `hooks/use*.ts` junto a la ruta o carpeta de la feature. `page.tsx` / `layout.tsx` actúan como compositores delgados. Agrupar por carpeta (`Feature/index.tsx` + piezas) cuando mejore la navegación del código.
 - Componentes verdaderamente compartidos entre segmentos deben moverse a `components/` global.
 - Evitar mover por defecto logica de ruta a `views/`; en App Router la ruta se modela con `page.tsx` + componentes.
 
@@ -76,6 +77,13 @@ No permitido (por defecto):
 - Si el archivo usa `useEffect`, `useState`, `useRouter`, handlers de eventos o APIs del navegador, ese archivo puede ser cliente.
 - Si solo compone datos/markup, debe permanecer server.
 - Cuando haya duda, empezar server y extraer un componente cliente pequeno para la parte interactiva.
+
+### Zustand y stores
+
+- Los stores en `stores/*` (p. ej. `useProfileStore`, `useCollectionsStore`, `useSyncStore`) solo deben importarse en **componentes cliente** que realmente suscriban o muten ese estado.
+- Preferir **selectores** (`useProfileStore((s) => s.campo)`) en componentes pequeños para limitar re-renders; no envolver rutas enteras en cliente solo por leer el store si un hijo `*Client.tsx` basta.
+- El layout privado puede orquestar sync/auth en un único cliente (`PrivateLayoutClient`); las páginas hijas pueden seguir siendo Server Components si delegan la UI interactiva a islas.
+- `@tanstack/react-query`: el `QueryProvider` global se retiró del árbol raíz porque no había consumidores; si una ruta necesita React Query, añadir `QueryProvider` en el `layout.tsx` o contenedor cliente de ese segmento.
 
 ## Reglas operativas
 

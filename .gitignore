@@ -32,3 +32,4 @@ out
 
 # TypeScript incremental
 *.tsbuildinfo
+/coverage
