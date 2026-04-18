@@ -31,4 +31,13 @@ describe('sanitizeGeminiPayload', () => {
     const payload = { foo: 'bar', generationConfig: { temperature: 1 } };
     expect(sanitizeGeminiPayload(payload)).toEqual(payload);
   });
+
+  it('quita responseMimeType en generationConfig y generation_config a la vez', () => {
+    const out = sanitizeGeminiPayload({
+      generationConfig: { responseMimeType: 'application/json', topK: 8 },
+      generation_config: { responseMimeType: 'text/plain', topP: 0.9 },
+    });
+    expect(out.generationConfig).toEqual({ topK: 8 });
+    expect(out.generation_config).toEqual({ topP: 0.9 });
+  });
 });

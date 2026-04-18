@@ -2,7 +2,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildLocaleInstruction,
   buildSearchPrompt,
+  buildSupermarketInstruction,
   buildTimeConstraint,
   calculateTDEE,
   compactProfile,
@@ -17,10 +19,38 @@ import {
   getCurrencyForCountry,
   getCurrentSeasonForCountry,
   getGeminiCooldownUntil,
+  getSupermarketsForCountry,
   sanitizeUserInput,
   setCacheEntry,
   setGeminiCooldownUntil,
 } from './gemini.js';
+
+describe('getSupermarketsForCountry / buildSupermarketInstruction / buildLocaleInstruction', () => {
+  it('devuelve lista de Chile o fallback para país desconocido', () => {
+    const cl = getSupermarketsForCountry('Chile');
+    expect(cl.length).toBeGreaterThan(0);
+    expect(cl.some((s: string) => /Jumbo|Líder/i.test(s))).toBe(true);
+    expect(getSupermarketsForCountry('PaísInexistente')).toEqual(cl);
+  });
+
+  it('buildSupermarketInstruction vacío sin preferencias', () => {
+    expect(buildSupermarketInstruction({ country: 'Chile' })).toBe('');
+  });
+
+  it('buildSupermarketInstruction lista supers preferidos', () => {
+    const s = buildSupermarketInstruction({
+      country: 'Chile',
+      preferredSupermarkets: ['Jumbo', 'Líder'],
+    });
+    expect(s).toContain('Jumbo');
+    expect(s).toContain('Chile');
+  });
+
+  it('buildLocaleInstruction adapta idioma y país', () => {
+    expect(buildLocaleInstruction({ country: 'Chile', language: 'es' })).toMatch(/español|Chile/i);
+    expect(buildLocaleInstruction({ country: 'Chile', language: 'en' })).toMatch(/inglés/i);
+  });
+});
 
 describe('compactProfile', () => {
   it('concatena campos principales del perfil', () => {
